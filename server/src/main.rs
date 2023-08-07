@@ -1,5 +1,3 @@
-use std::io::Write;
-
 use color_eyre::Result;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -8,20 +6,17 @@ use tokio::{
 
 mod channeled_channel;
 
-type ConnectorChannel = (
-    crossbeam_channel::Sender<u16>,
-    crossbeam_channel::Receiver<u16>,
-);
+type ConnectorChannel = (async_channel::Sender<u16>, async_channel::Receiver<u16>);
 
 #[tokio::main]
 async fn main() -> Result<()> {
     color_eyre::install()?;
     let channels = channeled_channel::ChanneledChannel::<TcpStream>::new();
-    let connector_channel = crossbeam_channel::unbounded::<u16>();
+    let connector_channel = async_channel::unbounded::<u16>();
 
-    spawn_connector_worker(connector_channel.1.clone())?;
+    spawn_connector_worker(connector_channel.clone()).await?;
     spawn_connector_worker2(channels.clone()).await?;
-    spawn_proxy_worker(&channels, connector_channel.clone(), 8070).await?;
+    spawn_proxy_worker(channels.clone(), connector_channel.clone(), 8070).await?;
 
     tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?
         .recv()
@@ -30,17 +25,16 @@ async fn main() -> Result<()> {
 }
 
 async fn spawn_proxy_worker(
-    channels: &channeled_channel::ChanneledChannel<TcpStream>,
+    channels: channeled_channel::ChanneledChannel<TcpStream>,
     connector_channel: ConnectorChannel,
     port: u16,
 ) -> Result<()> {
     println!("Spawning proxy worker on port {}", port);
     channels.create_channel(port).await?;
-    let rx = channels.get_receiver(&port).await.unwrap();
 
     tokio::spawn(async move {
         loop {
-            if let Err(e) = proxy_worker(rx.clone(), &connector_channel, &port).await {
+            if let Err(e) = proxy_worker(&channels, &connector_channel, &port).await {
                 eprintln!("proxy_worker error: {:?}", e);
             }
         }
@@ -50,11 +44,12 @@ async fn spawn_proxy_worker(
 }
 
 async fn proxy_worker(
-    channel: crossbeam_channel::Receiver<TcpStream>,
+    channels: &channeled_channel::ChanneledChannel<TcpStream>,
     connector_channel: &ConnectorChannel,
     port: &u16,
 ) -> Result<()> {
     let listener = TcpListener::bind(("0.0.0.0", port.to_owned())).await?;
+    let channel = channels.get_receiver(&port).await.unwrap();
 
     loop {
         let (mut socket, _) = listener.accept().await?;
@@ -65,39 +60,38 @@ async fn proxy_worker(
         let channel = channel.clone();
 
         tokio::spawn(async move {
-            connector_channel.0.send(port)?;
+            connector_channel.0.send(port).await?;
 
-            loop {
-                if let Ok(mut proxy_socket) = channel.try_recv() {
-                    tokio::io::copy_bidirectional(&mut socket, &mut proxy_socket).await?;
-                    return Ok::<(), color_eyre::Report>(());
-                }
+            let mut proxy_socket = channel.recv().await?;
+            tokio::io::copy_bidirectional(&mut socket, &mut proxy_socket).await?;
 
-                tokio::time::sleep(std::time::Duration::from_millis(1)).await;
-            }
+            Ok::<(), color_eyre::Report>(())
         });
     }
 }
 
-fn spawn_connector_worker(channel: crossbeam_channel::Receiver<u16>) -> Result<()> {
-    std::thread::spawn(move || loop {
-        if let Err(e) = connector_worker(&channel) {
-            eprintln!("connector_worker error: {:?}", e);
+async fn spawn_connector_worker(channel: ConnectorChannel) -> Result<()> {
+    tokio::spawn(async move {
+        loop {
+            if let Err(e) = connector_worker(&channel).await {
+                eprintln!("connector_worker error: {:?}", e);
+            }
         }
     });
 
     Ok(())
 }
 
-fn connector_worker(channel: &crossbeam_channel::Receiver<u16>) -> Result<()> {
-    let listener = std::net::TcpListener::bind("0.0.0.0:1337")?;
+async fn connector_worker(channel: &ConnectorChannel) -> Result<()> {
+    let listener = TcpListener::bind("0.0.0.0:1337").await?;
     loop {
-        let (mut socket, _) = listener.accept()?;
+        let (mut socket, _) = listener.accept().await?;
         socket.set_nodelay(true)?;
 
-        while let Ok(port) = channel.recv() {
-            if let Err(e) = socket.write_all(&port.to_be_bytes()) {
+        while let Ok(port) = channel.1.recv().await {
+            if let Err(e) = socket.write_u16(port).await {
                 eprintln!("Failed to write to socket {:?}", e);
+                let _ = channel.0.send(port);
 
                 break;
             }
@@ -130,9 +124,12 @@ async fn connector_worker2(
         let channels = channels.clone();
         tokio::spawn(async move {
             let port = socket.read_u16().await?;
-            println!("Waiting for port");
-            channels.get_sender(&port).await.unwrap().send(socket)?;
-            println!("Waiting for port2");
+            channels
+                .get_sender(&port)
+                .await
+                .unwrap()
+                .send(socket)
+                .await?;
 
             Ok::<(), color_eyre::Report>(())
         });
