@@ -8,7 +8,7 @@ pub async fn spawn_proxy_worker(
     port: u16,
 ) -> Result<()> {
     println!("Spawning proxy worker on port {}", port);
-    channels.create_channel(port).await?;
+    channels.create_channel(&port).await?;
 
     tokio::spawn(async move {
         loop {

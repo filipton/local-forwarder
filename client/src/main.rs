@@ -1,3 +1,5 @@
+use std::u128;
+
 use color_eyre::Result;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -10,6 +12,13 @@ async fn main() -> Result<()> {
     let connector_ip = std::env::args()
         .nth(1)
         .ok_or_else(|| color_eyre::eyre::eyre!("Connector address not provided (first arg)"))?;
+    let connector_code = u128::from_str_radix(
+        &std::env::args()
+            .nth(2)
+            .ok_or_else(|| color_eyre::eyre::eyre!("Connector code not provided (second arg)"))?,
+        10,
+    )?;
+
     spawn_connector_worker(connector_ip).await?;
 
     tokio::signal::ctrl_c().await?;
@@ -33,6 +42,7 @@ async fn connector_worker(connector_ip: String) -> Result<()> {
     let mut stream = tokio::net::TcpStream::connect((connector_ip.clone(), CONNECTOR_PORT)).await?;
     stream.set_nodelay(true)?;
     stream.write_u16(0).await?;
+    stream.write_u128(0).await?;
     stream.flush().await?;
 
     loop {

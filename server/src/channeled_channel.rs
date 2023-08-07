@@ -15,9 +15,15 @@ impl<T> ChanneledChannel<T> {
         }
     }
 
-    pub async fn create_channel(&self, id: u16) -> Result<()> {
+    pub async fn create_channel(&self, id: &u16) -> Result<()> {
         let (tx, rx) = async_channel::unbounded::<T>();
-        self.channels.write().await.insert(id, (tx, rx));
+        self.channels.write().await.insert(*id, (tx, rx));
+
+        Ok(())
+    }
+
+    pub async fn remove_channel(&self, id: &u16) -> Result<()> {
+        self.channels.write().await.remove(id);
 
         Ok(())
     }
