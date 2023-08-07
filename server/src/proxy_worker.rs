@@ -40,10 +40,9 @@ async fn proxy_worker(
 
         tokio::spawn(async move {
             connector_channel.0.send(port).await?;
-
             let mut proxy_socket = channel.recv().await?;
-            tokio::io::copy_bidirectional(&mut socket, &mut proxy_socket).await?;
 
+            tokio::io::copy_bidirectional(&mut socket, &mut proxy_socket).await?;
             Ok::<(), color_eyre::Report>(())
         });
     }

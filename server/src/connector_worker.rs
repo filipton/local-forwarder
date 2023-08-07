@@ -4,6 +4,8 @@ use color_eyre::Result;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
+    sync::RwLock,
+    task::JoinHandle,
 };
 
 use crate::{channeled_channel, ConnectorChannel};
@@ -29,8 +31,7 @@ async fn connector_worker(
     channels: &channeled_channel::ChanneledChannel<TcpStream>,
 ) -> Result<()> {
     let listener = TcpListener::bind("0.0.0.0:1337").await?;
-    let proxy_killer = Arc::new(tokio::sync::Notify::new());
-    let proxy_connected = Arc::new(AtomicBool::new(false));
+    let connector_task: Arc<RwLock<Option<JoinHandle<()>>>> = Arc::new(RwLock::new(None));
 
     loop {
         let (mut socket, _) = listener.accept().await?;
@@ -38,8 +39,7 @@ async fn connector_worker(
 
         let channel = channel.clone();
         let channels = channels.clone();
-        let proxy_killer = proxy_killer.clone();
-        let proxy_connected = proxy_connected.clone();
+        let connector_task = connector_task.clone();
 
         tokio::spawn(async move {
             let port = socket.read_u16().await.unwrap();
@@ -51,29 +51,21 @@ async fn connector_worker(
                     return Ok(());
                 }
 
-                if proxy_connected.load(std::sync::atomic::Ordering::Relaxed) {
-                    proxy_killer.notify_one();
+                if let Some(task) = connector_task.read().await.as_ref() {
+                    task.abort();
                 }
 
-                proxy_connected.store(true, std::sync::atomic::Ordering::Relaxed);
+                let task = tokio::spawn(async move {
+                    while let Ok(port) = channel.1.recv().await {
+                        if let Err(e) = socket.write_u16(port).await {
+                            eprintln!("Failed to write to socket {:?}", e);
+                            let _ = channel.0.send(port);
 
-                loop {
-                    tokio::select! {
-                        Ok(port) = channel.1.recv() => {
-                            if let Err(e) = socket.write_u16(port).await {
-                                eprintln!("Failed to write to socket {:?}", e);
-                                //let _ = channel.0.send(port);
-
-                                proxy_connected.store(false, std::sync::atomic::Ordering::Relaxed);
-                                return Ok(());
-                            }
-                        },
-                        _ = proxy_killer.notified() => {
-                            proxy_connected.store(false, std::sync::atomic::Ordering::Relaxed);
-                            return Ok(());
+                            return;
                         }
                     }
-                }
+                });
+                connector_task.write().await.replace(task);
             } else {
                 channels
                     .get_sender(&port)
