@@ -2,7 +2,6 @@ use color_eyre::Result;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 const CONNECTOR_PORT: u16 = 1337;
-const PROXY_PORT: u16 = 1338;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -33,13 +32,16 @@ async fn spawn_connector_worker(connector_ip: String) -> Result<()> {
 async fn connector_worker(connector_ip: String) -> Result<()> {
     let mut stream = tokio::net::TcpStream::connect((connector_ip.clone(), CONNECTOR_PORT)).await?;
     stream.set_nodelay(true)?;
+    stream.write_u16(0).await?;
+    stream.flush().await?;
+
     loop {
         let connector_ip = connector_ip.clone();
         let port = stream.read_u16().await?;
 
         tokio::spawn(async move {
             let mut proxy_stream =
-                tokio::net::TcpStream::connect((connector_ip, PROXY_PORT)).await?;
+                tokio::net::TcpStream::connect((connector_ip, CONNECTOR_PORT)).await?;
             let mut proxy_conn = tokio::net::TcpStream::connect(("localhost", port)).await?;
 
             proxy_stream.set_nodelay(true)?;
