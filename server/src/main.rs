@@ -2,6 +2,7 @@ use color_eyre::Result;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
+    task::JoinHandle,
 };
 
 mod channeled_channel;
@@ -15,12 +16,10 @@ async fn main() -> Result<()> {
     let connector_channel = async_channel::unbounded::<u16>();
 
     spawn_connector_worker(connector_channel.clone()).await?;
-    spawn_connector_worker2(channels.clone()).await?;
-    spawn_proxy_worker(channels.clone(), connector_channel.clone(), 8070).await?;
+    spawn_proxy_connector_worker(channels.clone()).await?;
+    spawn_proxy_worker(channels.clone(), connector_channel.clone(), 80).await?;
 
-    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?
-        .recv()
-        .await;
+    tokio::signal::ctrl_c().await?;
     Ok(())
 }
 
@@ -35,7 +34,8 @@ async fn spawn_proxy_worker(
     tokio::spawn(async move {
         loop {
             if let Err(e) = proxy_worker(&channels, &connector_channel, &port).await {
-                eprintln!("proxy_worker error: {:?}", e);
+                eprintln!("Proxy worker error: {:?}", e);
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
         }
     });
@@ -74,7 +74,7 @@ async fn spawn_connector_worker(channel: ConnectorChannel) -> Result<()> {
     tokio::spawn(async move {
         loop {
             if let Err(e) = connector_worker(&channel).await {
-                eprintln!("connector_worker error: {:?}", e);
+                eprintln!("Connection worker error: {:?}", e);
             }
         }
     });
@@ -84,28 +84,37 @@ async fn spawn_connector_worker(channel: ConnectorChannel) -> Result<()> {
 
 async fn connector_worker(channel: &ConnectorChannel) -> Result<()> {
     let listener = TcpListener::bind("0.0.0.0:1337").await?;
+    let mut last_task: Option<JoinHandle<()>> = None;
+
     loop {
         let (mut socket, _) = listener.accept().await?;
         socket.set_nodelay(true)?;
 
-        while let Ok(port) = channel.1.recv().await {
-            if let Err(e) = socket.write_u16(port).await {
-                eprintln!("Failed to write to socket {:?}", e);
-                let _ = channel.0.send(port);
-
-                break;
-            }
+        if let Some(task) = last_task.take() {
+            task.abort();
         }
+
+        let channel = channel.clone();
+        last_task = Some(tokio::spawn(async move {
+            while let Ok(port) = channel.1.recv().await {
+                if let Err(e) = socket.write_u16(port).await {
+                    eprintln!("Failed to write to socket {:?}", e);
+                    let _ = channel.0.send(port);
+
+                    break;
+                }
+            }
+        }));
     }
 }
 
-async fn spawn_connector_worker2(
+async fn spawn_proxy_connector_worker(
     channels: channeled_channel::ChanneledChannel<TcpStream>,
 ) -> Result<()> {
     tokio::spawn(async move {
         loop {
-            if let Err(e) = connector_worker2(&channels).await {
-                eprintln!("connector_worker error: {:?}", e);
+            if let Err(e) = proxy_connector_worker(&channels).await {
+                eprintln!("Proxy connector worker error: {:?}", e);
             }
         }
     });
@@ -113,7 +122,7 @@ async fn spawn_connector_worker2(
     Ok(())
 }
 
-async fn connector_worker2(
+async fn proxy_connector_worker(
     channels: &channeled_channel::ChanneledChannel<TcpStream>,
 ) -> Result<()> {
     let listener = TcpListener::bind("0.0.0.0:1338").await?;
