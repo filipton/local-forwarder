@@ -1,4 +1,5 @@
 use color_eyre::Result;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -7,7 +8,7 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::{channeled_channel, ConnectorChannel};
+use crate::{channeled_channel, proxy_worker, ConnectorChannel};
 
 pub async fn spawn_connector_worker(
     channel: ConnectorChannel,
@@ -26,7 +27,7 @@ pub async fn spawn_connector_worker(
 }
 
 async fn connector_worker(
-    channel: &ConnectorChannel,
+    connector_channel: &ConnectorChannel,
     channels: &channeled_channel::ChanneledChannel<TcpStream>,
 ) -> Result<()> {
     let listener = TcpListener::bind("0.0.0.0:1337").await?;
@@ -36,16 +37,14 @@ async fn connector_worker(
         let (mut socket, _) = listener.accept().await?;
         socket.set_nodelay(true)?;
 
-        let channel = channel.clone();
         let channels = channels.clone();
         let connector_task = connector_task.clone();
+        let connector_channel = connector_channel.clone();
 
         tokio::spawn(async move {
-            let port = socket.read_u16().await.unwrap();
+            let port = socket.read_u16().await?;
             if port == 0 {
-                let code = socket.read_u128().await.unwrap();
-
-                // here check the code, for now code is 0
+                let code = socket.read_u128().await?;
                 if code != 0 {
                     return Ok(());
                 }
@@ -54,8 +53,20 @@ async fn connector_worker(
                     task.abort();
                 }
 
+                let info_len = socket.read_u16().await?;
+                let mut info = vec![0; info_len as usize];
+                socket.read_exact(&mut info).await?;
+
+                let info: ConnectorInfo = bincode::deserialize(&info)?;
+                proxy_worker::spawn_multiple_proxy_workers(
+                    channels.clone(),
+                    connector_channel.clone(),
+                    info.ports.iter().map(|p| p.port_worker).collect(),
+                )
+                .await?;
+
                 let task = tokio::spawn(async move {
-                    while let Ok(port) = channel.1.recv().await {
+                    while let Ok(port) = connector_channel.1.recv().await {
                         if let Err(e) = socket.write_u16(port).await {
                             eprintln!("Failed to write to socket {:?}", e);
                             //let _ = channel.0.send(port);
@@ -78,4 +89,23 @@ async fn connector_worker(
             Ok::<(), color_eyre::Report>(())
         });
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectorInfo {
+    pub ports: Vec<ConnectorPort>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectorPort {
+    pub port_worker: u16,
+    pub port_local: u16,
+    pub port_type: PortType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
+pub enum PortType {
+    Tcp,
+    Udp,
 }

@@ -13,7 +13,6 @@ async fn main() -> Result<()> {
     let connector_channel = async_channel::unbounded::<u16>();
 
     connector_worker::spawn_connector_worker(connector_channel.clone(), channels.clone()).await?;
-    proxy_worker::spawn_proxy_worker(channels.clone(), connector_channel.clone(), 80).await?;
 
     tokio::signal::ctrl_c().await?;
     Ok(())
