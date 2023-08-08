@@ -38,9 +38,15 @@ async fn proxy_worker(
         let channel = channel.clone();
 
         tokio::spawn(async move {
-            let mut proxy_socket = channel.recv().await?;
+            tokio::select! {
+                Ok(mut proxy_socket) = channel.recv() => {
+                    tokio::io::copy_bidirectional(&mut socket, &mut proxy_socket).await?;
+                },
+                _ = tokio::time::sleep(tokio::time::Duration::from_secs(5)) => {
+                    eprintln!("Proxy worker timed out");
+                }
+            }
 
-            tokio::io::copy_bidirectional(&mut socket, &mut proxy_socket).await?;
             Ok::<(), color_eyre::Report>(())
         });
     }
