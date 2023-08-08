@@ -1,6 +1,5 @@
-use std::sync::{atomic::AtomicBool, Arc};
-
 use color_eyre::Result;
+use std::sync::Arc;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -59,12 +58,13 @@ async fn connector_worker(
                     while let Ok(port) = channel.1.recv().await {
                         if let Err(e) = socket.write_u16(port).await {
                             eprintln!("Failed to write to socket {:?}", e);
-                            let _ = channel.0.send(port);
+                            //let _ = channel.0.send(port);
 
                             return;
                         }
                     }
                 });
+
                 connector_task.write().await.replace(task);
             } else {
                 channels

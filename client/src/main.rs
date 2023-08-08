@@ -1,6 +1,5 @@
-use std::u128;
-
 use color_eyre::Result;
+use std::u128;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 const CONNECTOR_PORT: u16 = 1337;

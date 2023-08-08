@@ -34,12 +34,10 @@ async fn proxy_worker(
         let (mut socket, _) = listener.accept().await?;
         socket.set_nodelay(true)?;
 
-        let connector_channel = connector_channel.clone();
-        let port = port.to_owned();
+        connector_channel.0.send(*port).await?;
         let channel = channel.clone();
 
         tokio::spawn(async move {
-            connector_channel.0.send(port).await?;
             let mut proxy_socket = channel.recv().await?;
 
             tokio::io::copy_bidirectional(&mut socket, &mut proxy_socket).await?;
