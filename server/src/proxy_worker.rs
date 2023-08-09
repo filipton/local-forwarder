@@ -114,10 +114,11 @@ async fn proxy_worker_udp(
     let channel = channels.get_receiver(&port).await.unwrap();
     loop {
         let (mut stream, _) = listener.accept().await?;
+        println!("UDP connection accepted {:?}", stream.peer_addr()?);
 
         connector_channel.0.send(*port).await?;
         let channel = channel.clone();
-        tokio::spawn(async move {
+        let res = tokio::spawn(async move {
             tokio::select! {
                 Ok(mut proxy_socket) = channel.recv() => {
                     let mut local_buf = vec![0u8; UDP_BUFFER_SIZE];
@@ -130,9 +131,11 @@ async fn proxy_worker_udp(
                                     stream.shutdown();
                                     proxy_socket.shutdown().await?;
 
+                                    println!("UDP connection timed out {:?}", stream.peer_addr()?);
                                     break;
                                 }
                                 let n = res??;
+                                println!("UDP connection read {} bytes", n);
 
                                 proxy_socket.write_all(&local_buf[..n]).await?;
                             }
@@ -141,9 +144,14 @@ async fn proxy_worker_udp(
                                     stream.shutdown();
                                     proxy_socket.shutdown().await?;
 
+                                    println!("2UDP connection timed out {:?}", stream.peer_addr()?);
                                     break;
                                 }
                                 let n = res??;
+                                if n == 0 {
+                                    tokio::time::sleep(tokio::time::Duration::from_micros(100)).await;
+                                }
+                                //println!("2UDP connection read {} bytes", n);
 
                                 stream.write_all(&remote_buf[..n]).await?;
                             }

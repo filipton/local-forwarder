@@ -99,7 +99,7 @@ async fn connector_worker(connector_ip: &String, connector_code: &u128) -> Resul
                 tokio::io::copy_bidirectional(&mut proxy_stream, &mut proxy_conn).await?;
             } else if local_port.port_type == PortType::Udp {
                 let mut remote =
-                    UdpStream::connect(format!("localhost:{}", local_port.port_local).parse()?)
+                    UdpStream::connect(format!("127.0.0.1:{}", local_port.port_local).parse()?)
                         .await?;
 
                 let mut local_buf = vec![0u8; UDP_BUFFER_SIZE];
@@ -117,6 +117,7 @@ async fn connector_worker(connector_ip: &String, connector_code: &u128) -> Resul
                                 break;
                             }
                             let n = res.unwrap().unwrap();
+                            println!("Read {} bytes", n);
 
                             remote.write_all(&local_buf[..n]).await.unwrap();
                         }
@@ -129,6 +130,7 @@ async fn connector_worker(connector_ip: &String, connector_code: &u128) -> Resul
                                 break;
                             }
                             let n = res.unwrap().unwrap();
+                            println!("2Read {} bytes", n);
 
                             proxy_stream.write_all(&remote_buf[..n]).await.unwrap();
                         }
