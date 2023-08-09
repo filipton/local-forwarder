@@ -61,7 +61,7 @@ async fn connector_worker(
                 proxy_worker::spawn_multiple_proxy_workers(
                     channels.clone(),
                     connector_channel.clone(),
-                    info.ports.iter().map(|p| p.port_worker).collect(),
+                    info.ports,
                 )
                 .await?;
 
@@ -103,7 +103,7 @@ pub struct ConnectorPort {
     pub port_type: PortType,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[allow(dead_code)]
 pub enum PortType {
     Tcp,

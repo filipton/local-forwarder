@@ -149,6 +149,7 @@ dependencies = [
  "color-eyre",
  "serde",
  "tokio",
+ "udp-stream",
 ]
 
 [[package]]
@@ -432,6 +433,16 @@ dependencies = [
  "sharded-slab",
  "thread_local",
  "tracing-core",
+]
+
+[[package]]
+name = "udp-stream"
+version = "0.0.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8df3ef1fa3dfd82c5ada9eec0093cfbb1775a063eda2f38443d4fafd3081af19"
+dependencies = [
+ "bytes",
+ "tokio",
 ]
 
 [[package]]

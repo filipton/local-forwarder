@@ -1,9 +1,13 @@
 use color_eyre::Result;
 use serde::{Deserialize, Serialize};
-use std::u128;
+use std::{time::Duration, u128};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use udp_stream::UdpStream;
 
 const CONNECTOR_PORT: u16 = 1337;
+
+const UDP_BUFFER_SIZE: usize = 17480; // 17kb
+const UDP_TIMEOUT: u64 = 10 * 1000; // 10sec
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -56,6 +60,11 @@ async fn connector_worker(connector_ip: &String, connector_code: &u128) -> Resul
                 port_local: 5173,
                 port_type: PortType::Tcp,
             },
+            ConnectorPort {
+                port_worker: 82,
+                port_local: 8888,
+                port_type: PortType::Udp,
+            },
         ],
     };
     let encoded_data = bincode::serialize(&info)?;
@@ -67,31 +76,68 @@ async fn connector_worker(connector_ip: &String, connector_code: &u128) -> Resul
     loop {
         let connector_ip = connector_ip.clone();
         let port = stream.read_u16().await?;
-        let local_port = info
-            .ports
-            .iter()
-            .find(|p| p.port_worker == port)
-            .map(|p| p.port_local);
-
-        if local_port.is_none() {
-            eprintln!("Unknown local port: {}", port);
-            continue;
-        }
+        let local_port = match info.ports.iter().find(|p| p.port_worker == port).cloned() {
+            Some(p) => p,
+            None => {
+                eprintln!("Unknown port: {}", port);
+                continue;
+            }
+        };
 
         tokio::spawn(async move {
             let mut proxy_stream =
                 tokio::net::TcpStream::connect((connector_ip, CONNECTOR_PORT)).await?;
-            let mut proxy_conn = tokio::net::TcpStream::connect((
-                "localhost",
-                local_port.expect("This port should be set (local)"),
-            ))
-            .await?;
 
             proxy_stream.set_nodelay(true)?;
             proxy_stream.write_u16(port).await?;
             proxy_stream.flush().await?;
 
-            tokio::io::copy_bidirectional(&mut proxy_stream, &mut proxy_conn).await?;
+            if local_port.port_type == PortType::Tcp {
+                let mut proxy_conn =
+                    tokio::net::TcpStream::connect(("localhost", local_port.port_local)).await?;
+
+                tokio::io::copy_bidirectional(&mut proxy_stream, &mut proxy_conn).await?;
+            } else if local_port.port_type == PortType::Udp {
+                let mut remote =
+                    UdpStream::connect(format!("localhost:{}", local_port.port_local).parse()?)
+                        .await?;
+
+                let mut local_buf = vec![0u8; UDP_BUFFER_SIZE];
+                let mut remote_buf = vec![0u8; UDP_BUFFER_SIZE];
+
+                let timeout = Duration::from_millis(UDP_TIMEOUT);
+                loop {
+                    tokio::select! {
+                        res = tokio::time::timeout(timeout, proxy_stream.read(&mut local_buf))=> {
+                            if res.is_err() {
+                                remote.shutdown();
+                                proxy_stream.shutdown().await?;
+
+                                println!("Connection closed");
+                                break;
+                            }
+                            let n = res.unwrap().unwrap();
+
+                            remote.write_all(&local_buf[..n]).await.unwrap();
+                        }
+                        res = tokio::time::timeout(timeout, remote.read(&mut remote_buf)) => {
+                            if res.is_err() {
+                                remote.shutdown();
+                                proxy_stream.shutdown().await?;
+
+                                println!("Connection closed");
+                                break;
+                            }
+                            let n = res.unwrap().unwrap();
+
+                            proxy_stream.write_all(&remote_buf[..n]).await.unwrap();
+                        }
+                    }
+                }
+            } else {
+                unreachable!();
+            }
+
             Ok::<_, color_eyre::Report>(())
         });
     }
@@ -109,7 +155,7 @@ pub struct ConnectorPort {
     pub port_type: PortType,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[allow(dead_code)]
 pub enum PortType {
     Tcp,

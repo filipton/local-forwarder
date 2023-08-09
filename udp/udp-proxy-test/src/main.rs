@@ -11,6 +11,7 @@ const UDP_TIMEOUT: u64 = 10 * 1000; // 10sec
 async fn main() -> Result<()> {
     let addr = "127.0.0.1:8080";
     let remote_addr = "127.0.0.1:8888";
+    let timeout = Duration::from_millis(UDP_TIMEOUT);
     let listener = UdpListener::bind(addr.parse()?).await?;
     loop {
         let (mut stream, _) = listener.accept().await?;
@@ -23,7 +24,6 @@ async fn main() -> Result<()> {
 
             let mut local_buf = vec![0u8; UDP_BUFFER_SIZE];
             let mut remote_buf = vec![0u8; UDP_BUFFER_SIZE];
-            let timeout = Duration::from_millis(UDP_TIMEOUT);
 
             loop {
                 tokio::select! {
