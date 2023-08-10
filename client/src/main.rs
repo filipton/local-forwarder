@@ -132,7 +132,6 @@ async fn proxy_udp(mut proxy_stream: TcpStream, ip: &str, local_port: u16) -> Re
                 }
 
                 let n = res??;
-                println!("Read {} bytes from local", n);
                 remote.write_all(&local_buf[..n]).await?;
             }
             res = tokio::time::timeout(timeout, remote.read(&mut remote_buf)) => {
@@ -143,7 +142,6 @@ async fn proxy_udp(mut proxy_stream: TcpStream, ip: &str, local_port: u16) -> Re
                 }
 
                 let n = res??;
-                println!("Read {} bytes from remote", n);
                 proxy_stream.write_all(&remote_buf[..n]).await?;
             }
         }

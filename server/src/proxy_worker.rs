@@ -1,12 +1,11 @@
-use std::{sync::Arc, time::Duration};
-
 use crate::{
     channeled_channel,
-    connector_worker::{ConnectorPort, PortType},
+    structs::{ConnectorPort, PortType},
     ConnectorChannel,
 };
 use color_eyre::Result;
 use lazy_static::lazy_static;
+use std::{sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -28,6 +27,7 @@ pub async fn spawn_multiple_proxy_workers(
     connector_channel: ConnectorChannel,
     ports: Vec<ConnectorPort>,
 ) -> Result<()> {
+    channels.remove_all_channels().await?;
     for task in PROXY_TASKS.write().await.drain(..) {
         task.abort();
     }
@@ -79,7 +79,10 @@ async fn proxy_worker_tcp(
     port: &u16,
 ) -> Result<()> {
     let listener = TcpListener::bind(("0.0.0.0", port.to_owned())).await?;
-    let channel = channels.get_receiver(&port).await.unwrap();
+    let channel = channels
+        .get_receiver(&port)
+        .await
+        .ok_or_else(|| color_eyre::eyre::eyre!("Could not get receiver for port {}", port))?;
 
     loop {
         let (mut remote, _) = listener.accept().await?;
@@ -111,7 +114,11 @@ async fn proxy_worker_udp(
     let timeout = Duration::from_millis(UDP_TIMEOUT);
     let listener = UdpListener::bind(format!("0.0.0.0:{}", port).parse()?).await?;
 
-    let channel = channels.get_receiver(&port).await.unwrap();
+    let channel = channels
+        .get_receiver(&port)
+        .await
+        .ok_or_else(|| color_eyre::eyre::eyre!("Could not get receiver for port {}", port))?;
+
     loop {
         let (mut remote, _) = listener.accept().await?;
 

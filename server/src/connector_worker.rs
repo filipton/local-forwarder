@@ -1,5 +1,5 @@
+use crate::{channeled_channel, proxy_worker, ConnectorChannel, structs::ConnectorInfo};
 use color_eyre::Result;
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -7,8 +7,6 @@ use tokio::{
     sync::RwLock,
     task::JoinHandle,
 };
-
-use crate::{channeled_channel, proxy_worker, ConnectorChannel};
 
 pub async fn spawn_connector_worker(
     channel: ConnectorChannel,
@@ -81,7 +79,9 @@ async fn connector_worker(
                 channels
                     .get_sender(&port)
                     .await
-                    .unwrap()
+                    .ok_or_else(|| {
+                        color_eyre::eyre::eyre!("Could not get sender for port {}", port)
+                    })?
                     .send(socket)
                     .await?;
             }
@@ -89,23 +89,4 @@ async fn connector_worker(
             Ok::<(), color_eyre::Report>(())
         });
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConnectorInfo {
-    pub ports: Vec<ConnectorPort>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConnectorPort {
-    pub port_worker: u16,
-    pub port_local: u16,
-    pub port_type: PortType,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[allow(dead_code)]
-pub enum PortType {
-    Tcp,
-    Udp,
 }

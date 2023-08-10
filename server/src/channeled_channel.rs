@@ -1,6 +1,5 @@
-use std::{collections::HashMap, sync::Arc};
-
 use color_eyre::Result;
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 
 pub struct ChanneledChannel<T> {
@@ -24,6 +23,12 @@ impl<T> ChanneledChannel<T> {
 
     pub async fn remove_channel(&self, id: &u16) -> Result<()> {
         self.channels.write().await.remove(id);
+
+        Ok(())
+    }
+
+    pub async fn remove_all_channels(&self) -> Result<()> {
+        self.channels.write().await.clear();
 
         Ok(())
     }
