@@ -1,13 +1,18 @@
 use color_eyre::Result;
-use serde::{Deserialize, Serialize};
 use std::{time::Duration, u128};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use structs::{ConnectorInfo, ConnectorPort, PortType};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+};
 use udp_stream::UdpStream;
+
+mod structs;
 
 const CONNECTOR_PORT: u16 = 1337;
 
-const UDP_BUFFER_SIZE: usize = 17480; // 17kb
-const UDP_TIMEOUT: u64 = 10 * 1000; // 10sec
+const UDP_BUFFER_SIZE: usize = 65536;
+const UDP_TIMEOUT: u64 = 10 * 1000;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -93,51 +98,9 @@ async fn connector_worker(connector_ip: &String, connector_code: &u128) -> Resul
             proxy_stream.flush().await?;
 
             if local_port.port_type == PortType::Tcp {
-                let mut proxy_conn =
-                    tokio::net::TcpStream::connect(("localhost", local_port.port_local)).await?;
-
-                tokio::io::copy_bidirectional(&mut proxy_stream, &mut proxy_conn).await?;
+                proxy_tcp(proxy_stream, "127.0.0.1", local_port.port_local).await?;
             } else if local_port.port_type == PortType::Udp {
-                let mut remote =
-                    UdpStream::connect(format!("127.0.0.1:{}", local_port.port_local).parse()?)
-                        .await?;
-
-                let mut local_buf = vec![0u8; UDP_BUFFER_SIZE];
-                let mut remote_buf = vec![0u8; UDP_BUFFER_SIZE];
-
-                let timeout = Duration::from_millis(UDP_TIMEOUT);
-                loop {
-                    tokio::select! {
-                        res = tokio::time::timeout(timeout, proxy_stream.read(&mut local_buf))=> {
-                            if res.is_err() {
-                                remote.shutdown();
-                                proxy_stream.shutdown().await?;
-
-                                println!("Connection closed");
-                                break;
-                            }
-                            let n = res.unwrap().unwrap();
-                            println!("Read {} bytes", n);
-
-                            remote.write_all(&local_buf[..n]).await.unwrap();
-                        }
-                        res = tokio::time::timeout(timeout, remote.read(&mut remote_buf)) => {
-                            if res.is_err() {
-                                remote.shutdown();
-                                proxy_stream.shutdown().await?;
-
-                                println!("Connection closed");
-                                break;
-                            }
-                            let n = res.unwrap().unwrap();
-                            println!("2Read {} bytes", n);
-
-                            proxy_stream.write_all(&remote_buf[..n]).await.unwrap();
-                        }
-                    }
-                }
-            } else {
-                unreachable!();
+                proxy_udp(proxy_stream, "127.0.0.1", local_port.port_local).await?;
             }
 
             Ok::<_, color_eyre::Report>(())
@@ -145,21 +108,45 @@ async fn connector_worker(connector_ip: &String, connector_code: &u128) -> Resul
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConnectorInfo {
-    pub ports: Vec<ConnectorPort>,
+async fn proxy_tcp(mut proxy_stream: TcpStream, ip: &str, local_port: u16) -> Result<()> {
+    let mut remote = tokio::net::TcpStream::connect((ip, local_port)).await?;
+
+    tokio::io::copy_bidirectional(&mut proxy_stream, &mut remote).await?;
+    Ok(())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConnectorPort {
-    pub port_worker: u16,
-    pub port_local: u16,
-    pub port_type: PortType,
-}
+async fn proxy_udp(mut proxy_stream: TcpStream, ip: &str, local_port: u16) -> Result<()> {
+    let mut remote = UdpStream::connect(format!("{}:{}", ip, local_port).parse()?).await?;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[allow(dead_code)]
-pub enum PortType {
-    Tcp,
-    Udp,
+    let mut local_buf = vec![0u8; UDP_BUFFER_SIZE];
+    let mut remote_buf = vec![0u8; UDP_BUFFER_SIZE];
+
+    let timeout = Duration::from_millis(UDP_TIMEOUT);
+    loop {
+        tokio::select! {
+            res = tokio::time::timeout(timeout, proxy_stream.read(&mut local_buf))=> {
+                if res.is_err() {
+                    remote.shutdown();
+                    proxy_stream.shutdown().await?;
+                    break;
+                }
+
+                let n = res??;
+                println!("Read {} bytes from local", n);
+                remote.write_all(&local_buf[..n]).await?;
+            }
+            res = tokio::time::timeout(timeout, remote.read(&mut remote_buf)) => {
+                if res.is_err() {
+                    remote.shutdown();
+                    proxy_stream.shutdown().await?;
+                    break;
+                }
+
+                let n = res??;
+                println!("Read {} bytes from remote", n);
+                proxy_stream.write_all(&remote_buf[..n]).await?;
+            }
+        }
+    }
+    Ok(())
 }

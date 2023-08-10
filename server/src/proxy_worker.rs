@@ -15,8 +15,8 @@ use tokio::{
 };
 use udp_stream::UdpListener;
 
-const UDP_BUFFER_SIZE: usize = 17480; // 17kb
-const UDP_TIMEOUT: u64 = 10 * 1000; // 10sec
+const UDP_BUFFER_SIZE: usize = 65536;
+const UDP_TIMEOUT: u64 = 10 * 1000;
 
 lazy_static! {
     pub static ref PROXY_TASKS: Arc<RwLock<Vec<JoinHandle<()>>>> =
@@ -82,16 +82,16 @@ async fn proxy_worker_tcp(
     let channel = channels.get_receiver(&port).await.unwrap();
 
     loop {
-        let (mut socket, _) = listener.accept().await?;
-        socket.set_nodelay(true)?;
+        let (mut remote, _) = listener.accept().await?;
+        remote.set_nodelay(true)?;
 
         connector_channel.0.send(*port).await?;
         let channel = channel.clone();
 
         tokio::spawn(async move {
             tokio::select! {
-                Ok(mut proxy_socket) = channel.recv() => {
-                    tokio::io::copy_bidirectional(&mut socket, &mut proxy_socket).await?;
+                Ok(mut proxy_stream) = channel.recv() => {
+                    tokio::io::copy_bidirectional(&mut remote, &mut proxy_stream).await?;
                 },
                 _ = tokio::time::sleep(tokio::time::Duration::from_secs(1)) => {
                     eprintln!("Proxy worker timed out");
@@ -113,47 +113,37 @@ async fn proxy_worker_udp(
 
     let channel = channels.get_receiver(&port).await.unwrap();
     loop {
-        let (mut stream, _) = listener.accept().await?;
-        println!("UDP connection accepted {:?}", stream.peer_addr()?);
+        let (mut remote, _) = listener.accept().await?;
 
         connector_channel.0.send(*port).await?;
         let channel = channel.clone();
-        let res = tokio::spawn(async move {
+        tokio::spawn(async move {
             tokio::select! {
-                Ok(mut proxy_socket) = channel.recv() => {
+                Ok(mut proxy_stream) = channel.recv() => {
                     let mut local_buf = vec![0u8; UDP_BUFFER_SIZE];
                     let mut remote_buf = vec![0u8; UDP_BUFFER_SIZE];
 
                     loop {
                         tokio::select! {
-                            res = tokio::time::timeout(timeout, stream.read(&mut local_buf)) => {
+                            res = tokio::time::timeout(timeout, proxy_stream.read(&mut local_buf)) => {
                                 if res.is_err() {
-                                    stream.shutdown();
-                                    proxy_socket.shutdown().await?;
-
-                                    println!("UDP connection timed out {:?}", stream.peer_addr()?);
+                                    remote.shutdown();
+                                    proxy_stream.shutdown().await?;
                                     break;
                                 }
-                                let n = res??;
-                                println!("UDP connection read {} bytes", n);
 
-                                proxy_socket.write_all(&local_buf[..n]).await?;
+                                let n = res??;
+                                remote.write_all(&local_buf[..n]).await?;
                             }
-                            res = tokio::time::timeout(timeout, proxy_socket.read(&mut remote_buf)) => {
+                            res = tokio::time::timeout(timeout, remote.read(&mut remote_buf)) => {
                                 if res.is_err() {
-                                    stream.shutdown();
-                                    proxy_socket.shutdown().await?;
-
-                                    println!("2UDP connection timed out {:?}", stream.peer_addr()?);
+                                    remote.shutdown();
+                                    proxy_stream.shutdown().await?;
                                     break;
                                 }
-                                let n = res??;
-                                if n == 0 {
-                                    tokio::time::sleep(tokio::time::Duration::from_micros(100)).await;
-                                }
-                                //println!("2UDP connection read {} bytes", n);
 
-                                stream.write_all(&remote_buf[..n]).await?;
+                                let n = res??;
+                                proxy_stream.write_all(&remote_buf[..n]).await?;
                             }
                         }
                     }
