@@ -11,10 +11,11 @@ use tokio::{
 pub async fn spawn_connector_worker(
     channel: ConnectorChannel,
     channels: channeled_channel::ChanneledChannel<TcpStream>,
+    connector_code: u128,
 ) -> Result<()> {
     tokio::spawn(async move {
         loop {
-            if let Err(e) = connector_worker(&channel, &channels).await {
+            if let Err(e) = connector_worker(&channel, &channels, &connector_code).await {
                 eprintln!("Connection worker error: {:?}", e);
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
@@ -27,6 +28,7 @@ pub async fn spawn_connector_worker(
 async fn connector_worker(
     connector_channel: &ConnectorChannel,
     channels: &channeled_channel::ChanneledChannel<TcpStream>,
+    connector_code: &u128,
 ) -> Result<()> {
     let listener = TcpListener::bind("0.0.0.0:1337").await?;
     let connector_task: Arc<RwLock<Option<JoinHandle<()>>>> = Arc::new(RwLock::new(None));
@@ -38,11 +40,12 @@ async fn connector_worker(
         let channels = channels.clone();
         let connector_task = connector_task.clone();
         let connector_channel = connector_channel.clone();
+        let connector_code = connector_code.clone();
 
         tokio::spawn(async move {
             let port = socket.read_u16().await?;
             let code = socket.read_u128().await?;
-            if code != 0 {
+            if code != connector_code {
                 return Ok(());
             }
 
