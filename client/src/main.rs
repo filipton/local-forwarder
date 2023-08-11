@@ -58,17 +58,26 @@ async fn connector_worker(connector_ip: &String, connector_code: &u128) -> Resul
             ConnectorPort {
                 port_worker: 80,
                 port_local: 80,
+                local_ip: "127.0.0.1".to_string(),
                 port_type: PortType::Tcp,
             },
             ConnectorPort {
                 port_worker: 81,
                 port_local: 5173,
+                local_ip: "127.0.0.1".to_string(),
                 port_type: PortType::Tcp,
             },
             ConnectorPort {
                 port_worker: 82,
                 port_local: 8888,
+                local_ip: "127.0.0.1".to_string(),
                 port_type: PortType::Udp,
+            },
+            ConnectorPort {
+                port_worker: 83,
+                port_local: 80,
+                local_ip: "192.168.1.1".to_string(),
+                port_type: PortType::Tcp,
             },
         ],
     };
@@ -101,9 +110,9 @@ async fn connector_worker(connector_ip: &String, connector_code: &u128) -> Resul
             proxy_stream.flush().await?;
 
             if local_port.port_type == PortType::Tcp {
-                proxy_tcp(proxy_stream, "127.0.0.1", local_port.port_local).await?;
+                proxy_tcp(proxy_stream, &local_port.local_ip, local_port.port_local).await?;
             } else if local_port.port_type == PortType::Udp {
-                proxy_udp(proxy_stream, "127.0.0.1", local_port.port_local).await?;
+                proxy_udp(proxy_stream, &local_port.local_ip, local_port.port_local).await?;
             }
 
             Ok::<_, color_eyre::Report>(())
