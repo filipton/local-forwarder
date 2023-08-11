@@ -1,6 +1,6 @@
 use color_eyre::Result;
-use std::{time::Duration, u128};
-use structs::{Config, ConnectorInfo, ConvertedConfig, PortType};
+use std::time::Duration;
+use structs::{Config, ConvertedConfig, PortType};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -26,14 +26,7 @@ async fn main() -> Result<()> {
 async fn spawn_connector_worker(config: ConvertedConfig) -> Result<()> {
     tokio::spawn(async move {
         loop {
-            if let Err(e) = connector_worker(
-                &config.connector_ip,
-                &config.connector_port,
-                &config.code,
-                &config.connector,
-            )
-            .await
-            {
+            if let Err(e) = connector_worker(&config).await {
                 eprintln!("Error in connector worker: {}", e);
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
@@ -43,31 +36,28 @@ async fn spawn_connector_worker(config: ConvertedConfig) -> Result<()> {
     Ok(())
 }
 
-async fn connector_worker(
-    connector_ip: &String,
-    connector_port: &u16,
-    connector_code: &u128,
-    connector_info: &ConnectorInfo,
-) -> Result<()> {
-    let mut stream =
-        tokio::net::TcpStream::connect((connector_ip.clone(), *connector_port)).await?;
+async fn connector_worker(config: &ConvertedConfig) -> Result<()> {
+    let mut stream = tokio::net::TcpStream::connect((
+        config.connector_ip.clone(),
+        config.connector_port.clone(),
+    ))
+    .await?;
     stream.set_nodelay(true)?;
     stream.write_u16(0).await?;
-    stream.write_u128(*connector_code).await?;
+    stream.write_u128(config.code).await?;
 
-    let encoded_data = bincode::encode_to_vec(&connector_info, bincode::config::standard())?;
+    let encoded_data = bincode::encode_to_vec(&config.connector, bincode::config::standard())?;
 
     stream.write_u16(encoded_data.len() as u16).await?;
     stream.write_all(&encoded_data).await?;
     stream.flush().await?;
 
     loop {
-        let connector_ip = connector_ip.clone();
-        let connector_port = *connector_port;
-        let connector_code = connector_code.clone();
+        let config = config.clone();
 
         let port = stream.read_u16().await?;
-        let local_port = match connector_info
+        let local_port = match config
+            .connector
             .ports
             .iter()
             .find(|p| p.port_remote == port)
@@ -81,11 +71,13 @@ async fn connector_worker(
         };
 
         tokio::spawn(async move {
-            let mut tunnel = tokio::net::TcpStream::connect((connector_ip, connector_port)).await?;
+            let mut tunnel =
+                tokio::net::TcpStream::connect((config.connector_ip, config.connector_port))
+                    .await?;
 
             tunnel.set_nodelay(true)?;
             tunnel.write_u16(port).await?;
-            tunnel.write_u128(connector_code).await?;
+            tunnel.write_u128(config.code).await?;
             tunnel.flush().await?;
 
             if local_port.port_type == PortType::Tcp {

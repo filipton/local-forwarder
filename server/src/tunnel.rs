@@ -63,7 +63,7 @@ pub async fn spawn_tunnel(
             };
 
             if let Err(e) = res {
-                eprintln!("Proxy worker error: {:?}", e);
+                eprintln!("Tunnel error: {:?}", e);
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
         }
