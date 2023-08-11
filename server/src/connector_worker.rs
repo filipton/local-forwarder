@@ -58,7 +58,9 @@ async fn connector_worker(
                 let mut info = vec![0; info_len as usize];
                 socket.read_exact(&mut info).await?;
 
-                let info: ConnectorInfo = bincode::deserialize(&info)?;
+                let info: ConnectorInfo =
+                    bincode::decode_from_slice(&info, bincode::config::standard())?.0;
+
                 proxy_worker::spawn_multiple_proxy_workers(
                     channels.clone(),
                     connector_channel.clone(),

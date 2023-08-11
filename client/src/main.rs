@@ -72,7 +72,7 @@ async fn connector_worker(connector_ip: &String, connector_code: &u128) -> Resul
             },
         ],
     };
-    let encoded_data = bincode::serialize(&info)?;
+    let encoded_data = bincode::encode_to_vec(&info, bincode::config::standard())?;
 
     stream.write_u16(encoded_data.len() as u16).await?;
     stream.write_all(&encoded_data).await?;
