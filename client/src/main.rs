@@ -74,6 +74,12 @@ async fn connector_worker(connector_ip: &String, connector_code: &u128) -> Resul
                 port_type: PortType::Udp,
             },
             ConnectorPort {
+                port_worker: 82,
+                port_local: 8888,
+                local_ip: "127.0.0.1".to_string(),
+                port_type: PortType::Tcp,
+            },
+            ConnectorPort {
                 port_worker: 83,
                 port_local: 80,
                 local_ip: "192.168.1.1".to_string(),
@@ -101,18 +107,17 @@ async fn connector_worker(connector_ip: &String, connector_code: &u128) -> Resul
         };
 
         tokio::spawn(async move {
-            let mut proxy_stream =
-                tokio::net::TcpStream::connect((connector_ip, CONNECTOR_PORT)).await?;
+            let mut tunnel = tokio::net::TcpStream::connect((connector_ip, CONNECTOR_PORT)).await?;
 
-            proxy_stream.set_nodelay(true)?;
-            proxy_stream.write_u16(port).await?;
-            proxy_stream.write_u128(connector_code).await?;
-            proxy_stream.flush().await?;
+            tunnel.set_nodelay(true)?;
+            tunnel.write_u16(port).await?;
+            tunnel.write_u128(connector_code).await?;
+            tunnel.flush().await?;
 
             if local_port.port_type == PortType::Tcp {
-                proxy_tcp(proxy_stream, &local_port.local_ip, local_port.port_local).await?;
+                proxy_tcp(tunnel, &local_port.local_ip, local_port.port_local).await?;
             } else if local_port.port_type == PortType::Udp {
-                proxy_udp(proxy_stream, &local_port.local_ip, local_port.port_local).await?;
+                proxy_udp(tunnel, &local_port.local_ip, local_port.port_local).await?;
             }
 
             Ok::<_, color_eyre::Report>(())
@@ -120,15 +125,15 @@ async fn connector_worker(connector_ip: &String, connector_code: &u128) -> Resul
     }
 }
 
-async fn proxy_tcp(mut proxy_stream: TcpStream, ip: &str, local_port: u16) -> Result<()> {
-    let mut remote = tokio::net::TcpStream::connect((ip, local_port)).await?;
+async fn proxy_tcp(mut tunnel: TcpStream, ip: &str, local_port: u16) -> Result<()> {
+    let mut local = tokio::net::TcpStream::connect((ip, local_port)).await?;
 
-    tokio::io::copy_bidirectional(&mut proxy_stream, &mut remote).await?;
+    tokio::io::copy_bidirectional(&mut tunnel, &mut local).await?;
     Ok(())
 }
 
-async fn proxy_udp(mut proxy_stream: TcpStream, ip: &str, local_port: u16) -> Result<()> {
-    let mut remote = UdpStream::connect(format!("{}:{}", ip, local_port).parse()?).await?;
+async fn proxy_udp(mut tunnel: TcpStream, ip: &str, local_port: u16) -> Result<()> {
+    let mut local = UdpStream::connect(format!("{}:{}", ip, local_port).parse()?).await?;
 
     let mut local_buf = vec![0u8; UDP_BUFFER_SIZE];
     let mut remote_buf = vec![0u8; UDP_BUFFER_SIZE];
@@ -136,25 +141,25 @@ async fn proxy_udp(mut proxy_stream: TcpStream, ip: &str, local_port: u16) -> Re
     let timeout = Duration::from_millis(UDP_TIMEOUT);
     loop {
         tokio::select! {
-            res = tokio::time::timeout(timeout, proxy_stream.read(&mut local_buf))=> {
+            res = tokio::time::timeout(timeout, tunnel.read(&mut local_buf))=> {
                 if res.is_err() {
-                    remote.shutdown();
-                    proxy_stream.shutdown().await?;
+                    local.shutdown();
+                    tunnel.shutdown().await?;
                     break;
                 }
 
                 let n = res??;
-                remote.write_all(&local_buf[..n]).await?;
+                local.write_all(&local_buf[..n]).await?;
             }
-            res = tokio::time::timeout(timeout, remote.read(&mut remote_buf)) => {
+            res = tokio::time::timeout(timeout, local.read(&mut remote_buf)) => {
                 if res.is_err() {
-                    remote.shutdown();
-                    proxy_stream.shutdown().await?;
+                    local.shutdown();
+                    tunnel.shutdown().await?;
                     break;
                 }
 
                 let n = res??;
-                proxy_stream.write_all(&remote_buf[..n]).await?;
+                tunnel.write_all(&remote_buf[..n]).await?;
             }
         }
     }

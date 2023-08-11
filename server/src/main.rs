@@ -7,7 +7,7 @@ use tokio::{
 
 mod channeled_channel;
 mod connector_worker;
-mod proxy_worker;
+mod tunnel;
 mod structs;
 
 pub type ConnectorChannel = (async_channel::Sender<u16>, async_channel::Receiver<u16>);
@@ -15,12 +15,12 @@ pub type ConnectorChannel = (async_channel::Sender<u16>, async_channel::Receiver
 #[tokio::main]
 async fn main() -> Result<()> {
     color_eyre::install()?;
-    let channels = channeled_channel::ChanneledChannel::new();
+    let tunnel_channels = channeled_channel::ChanneledChannel::new();
     let connector_channel = async_channel::unbounded::<u16>();
     let connector_code = get_or_generate_code().await?;
 
     println!("Connector code: {}", connector_code);
-    connector_worker::spawn_connector_worker(connector_channel, channels, connector_code).await?;
+    connector_worker::spawn_connector_worker(connector_channel, tunnel_channels, connector_code).await?;
 
     tokio::signal::ctrl_c().await?;
     Ok(())
