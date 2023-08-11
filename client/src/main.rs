@@ -81,6 +81,8 @@ async fn connector_worker(connector_ip: &String, connector_code: &u128) -> Resul
     loop {
         let connector_ip = connector_ip.clone();
         let port = stream.read_u16().await?;
+        let connector_code = connector_code.clone();
+
         let local_port = match info.ports.iter().find(|p| p.port_worker == port).cloned() {
             Some(p) => p,
             None => {
@@ -95,6 +97,7 @@ async fn connector_worker(connector_ip: &String, connector_code: &u128) -> Resul
 
             proxy_stream.set_nodelay(true)?;
             proxy_stream.write_u16(port).await?;
+            proxy_stream.write_u128(connector_code).await?;
             proxy_stream.flush().await?;
 
             if local_port.port_type == PortType::Tcp {

@@ -1,4 +1,4 @@
-use crate::{channeled_channel, proxy_worker, ConnectorChannel, structs::ConnectorInfo};
+use crate::{channeled_channel, proxy_worker, structs::ConnectorInfo, ConnectorChannel};
 use color_eyre::Result;
 use std::sync::Arc;
 use tokio::{
@@ -41,12 +41,12 @@ async fn connector_worker(
 
         tokio::spawn(async move {
             let port = socket.read_u16().await?;
-            if port == 0 {
-                let code = socket.read_u128().await?;
-                if code != 0 {
-                    return Ok(());
-                }
+            let code = socket.read_u128().await?;
+            if code != 0 {
+                return Ok(());
+            }
 
+            if port == 0 {
                 if let Some(task) = connector_task.read().await.as_ref() {
                     task.abort();
                 }
