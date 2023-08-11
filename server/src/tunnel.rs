@@ -47,18 +47,18 @@ pub async fn spawn_tunnel(
 ) -> Result<()> {
     println!(
         "Spawning {:?} tunnel on port {}",
-        port.port_type, port.port_worker
+        port.port_type, port.port_remote
     );
-    tunnel_channels.create_channel(&port.port_worker).await?;
+    tunnel_channels.create_channel(&port.port_remote).await?;
 
     let task = tokio::spawn(async move {
         loop {
             let res = match port.port_type {
                 PortType::Tcp => {
-                    proxy_tunnel_tcp(&tunnel_channels, &connector_channel, &port.port_worker).await
+                    proxy_tunnel_tcp(&tunnel_channels, &connector_channel, &port.port_remote).await
                 }
                 PortType::Udp => {
-                    proxy_tunnel_udp(&tunnel_channels, &connector_channel, &port.port_worker).await
+                    proxy_tunnel_udp(&tunnel_channels, &connector_channel, &port.port_remote).await
                 }
             };
 

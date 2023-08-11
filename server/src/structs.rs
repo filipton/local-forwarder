@@ -7,10 +7,9 @@ pub struct ConnectorInfo {
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct ConnectorPort {
-    pub port_worker: u16,
+    pub port_remote: u16,
     pub port_local: u16,
     pub local_ip: String,
-
     pub port_type: PortType,
 }
 
