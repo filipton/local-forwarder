@@ -1,16 +1,20 @@
-use crate::{channeled_channel, structs::ConnectorInfo, tunnel, ConnectorChannel};
+use crate::{
+    channeled_channel,
+    structs::{ConnectorInfo, MultiStream},
+    tunnel, ConnectorChannel,
+};
 use color_eyre::Result;
 use std::sync::Arc;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream},
+    net::TcpListener,
     sync::RwLock,
     task::JoinHandle,
 };
 
 pub async fn spawn_connector_worker(
     connector_channel: ConnectorChannel,
-    tunnel_channels: channeled_channel::ChanneledChannel<TcpStream>,
+    tunnel_channels: channeled_channel::ChanneledChannel<MultiStream>,
     connector_code: u128,
 ) -> Result<()> {
     tokio::spawn(async move {
@@ -29,7 +33,7 @@ pub async fn spawn_connector_worker(
 
 async fn connector_worker(
     connector_channel: &ConnectorChannel,
-    tunnel_channels: &channeled_channel::ChanneledChannel<TcpStream>,
+    tunnel_channels: &channeled_channel::ChanneledChannel<MultiStream>,
     connector_code: &u128,
 ) -> Result<()> {
     let listener = TcpListener::bind("0.0.0.0:1337").await?;
@@ -89,7 +93,7 @@ async fn connector_worker(
                     .ok_or_else(|| {
                         color_eyre::eyre::eyre!("Could not get sender for port {}", port)
                     })?
-                    .send(socket)
+                    .send(MultiStream::Tcp(socket))
                     .await?;
             }
 

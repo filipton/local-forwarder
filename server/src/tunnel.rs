@@ -1,6 +1,6 @@
 use crate::{
     channeled_channel,
-    structs::{ConnectorPort, PortType},
+    structs::{ConnectorPort, MultiStream, PortType},
     ConnectorChannel,
 };
 use color_eyre::Result;
@@ -8,11 +8,11 @@ use lazy_static::lazy_static;
 use std::{sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream},
+    net::TcpListener,
     sync::RwLock,
     task::JoinHandle,
 };
-use udp_stream::UdpListener;
+use udp_stream::{UdpListener, UdpStream};
 
 const UDP_BUFFER_SIZE: usize = 65536;
 const UDP_TIMEOUT: u64 = 10 * 1000;
@@ -23,7 +23,7 @@ lazy_static! {
 }
 
 pub async fn spawn_multiple_tunnels(
-    tunnel_channels: channeled_channel::ChanneledChannel<TcpStream>,
+    tunnel_channels: channeled_channel::ChanneledChannel<MultiStream>,
     connector_channel: ConnectorChannel,
     ports: Vec<ConnectorPort>,
 ) -> Result<()> {
@@ -41,7 +41,7 @@ pub async fn spawn_multiple_tunnels(
 }
 
 pub async fn spawn_tunnel(
-    tunnel_channels: channeled_channel::ChanneledChannel<TcpStream>,
+    tunnel_channels: channeled_channel::ChanneledChannel<MultiStream>,
     connector_channel: ConnectorChannel,
     port: ConnectorPort,
 ) -> Result<()> {
@@ -74,7 +74,7 @@ pub async fn spawn_tunnel(
 }
 
 async fn proxy_tunnel_tcp(
-    tunnel_channels: &channeled_channel::ChanneledChannel<TcpStream>,
+    tunnel_channels: &channeled_channel::ChanneledChannel<MultiStream>,
     connector_channel: &ConnectorChannel,
     port: &u16,
 ) -> Result<()> {
@@ -93,8 +93,15 @@ async fn proxy_tunnel_tcp(
 
         tokio::spawn(async move {
             tokio::select! {
-                Ok(mut tunnel) = channel.recv() => {
-                    tokio::io::copy_bidirectional(&mut remote, &mut tunnel).await?;
+                Ok(tunnel) = channel.recv() => {
+                    match tunnel {
+                        MultiStream::Tcp(mut tunnel) => {
+                            tokio::io::copy_bidirectional(&mut remote, &mut tunnel).await?;
+                        }
+                        MultiStream::Udp(mut tunnel) => {
+                            tokio::io::copy_bidirectional(&mut remote, &mut tunnel).await?;
+                        }
+                    }
                 },
                 _ = tokio::time::sleep(tokio::time::Duration::from_secs(1)) => {
                     eprintln!("Tunnel timed out");
@@ -107,7 +114,7 @@ async fn proxy_tunnel_tcp(
 }
 
 async fn proxy_tunnel_udp(
-    tunnel_channels: &channeled_channel::ChanneledChannel<TcpStream>,
+    tunnel_channels: &channeled_channel::ChanneledChannel<MultiStream>,
     connector_channel: &ConnectorChannel,
     port: &u16,
 ) -> Result<()> {
