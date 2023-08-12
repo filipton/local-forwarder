@@ -41,8 +41,11 @@ async fn connector_worker(config: &ConvertedConfig) -> Result<()> {
     ))
     .await?;
     stream.set_nodelay(true)?;
-    stream.write_u16(0).await?;
-    stream.write_u128(config.code).await?;
+
+    let mut bytes = vec![];
+    bytes.write_u16(0).await?;
+    bytes.write_u128(config.code).await?;
+    stream.write_all(&bytes).await?;
 
     let encoded_data = config.connector.encode()?;
     stream.write_u16(encoded_data.len() as u16).await?;
@@ -71,7 +74,7 @@ async fn connector_worker(config: &ConvertedConfig) -> Result<()> {
             let tunnel = MultiStream::connect_and_setup(
                 &config.connector_ip,
                 config.connector_port,
-                PortType::Udp,
+                local_port.tunnel_type,
                 port,
                 config.code,
             )

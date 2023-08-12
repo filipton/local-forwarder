@@ -18,11 +18,15 @@ pub struct ConfigPort {
 
     #[serde(rename = "type")]
     pub _type: Option<String>,
+
+    #[serde(rename = "tunnelType")]
+    pub tunnel_type: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ConvertedConfig {
     pub connector: ConnectorInfo,
+
     pub code: u128,
     pub connector_ip: String,
     pub connector_port: u16,
@@ -40,7 +44,13 @@ impl Config {
                 let config = Config {
                     connector: String::from("server:1337"),
                     code: 123213123123123,
-                    ports: vec![],
+                    ports: vec![ConfigPort {
+                        remote: 8080,
+                        local: 80,
+                        ip: Some(String::from("127.0.0.1")),
+                        _type: Some(String::from("TCP")),
+                        tunnel_type: Some(String::from("tcp")),
+                    }],
                 };
 
                 let config_str = serde_json::to_string_pretty(&config)?;
@@ -54,7 +64,30 @@ impl Config {
     pub fn convert(&self) -> Result<ConvertedConfig> {
         let mut connector_ports: Vec<ConnectorPort> = Vec::new();
         for port in self.ports.iter() {
-            let _type = match port._type.as_ref().unwrap().to_uppercase().as_str() {
+            let _type = match port
+                ._type
+                .as_ref()
+                .unwrap_or(&String::from("TCP"))
+                .to_uppercase()
+                .as_str()
+            {
+                "TCP" => PortType::Tcp,
+                "UDP" => PortType::Udp,
+                _ => {
+                    return Err(color_eyre::eyre::eyre!(
+                        "Invalid port type: {}",
+                        port._type.as_ref().unwrap()
+                    ))
+                }
+            };
+
+            let tunnel_type = match port
+                .tunnel_type
+                .as_ref()
+                .unwrap_or(&String::from("TCP"))
+                .to_uppercase()
+                .as_str()
+            {
                 "TCP" => PortType::Tcp,
                 "UDP" => PortType::Udp,
                 _ => {
@@ -70,6 +103,7 @@ impl Config {
                 port_local: port.local,
                 local_ip: port.ip.clone().unwrap_or(String::from("127.0.0.1")),
                 port_type: _type,
+                tunnel_type,
             });
         }
 

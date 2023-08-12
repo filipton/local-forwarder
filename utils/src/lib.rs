@@ -28,6 +28,7 @@ pub struct ConnectorPort {
     pub local_ip: String,
 
     pub port_type: PortType,
+    pub tunnel_type: PortType,
 }
 
 #[derive(Debug, Clone, Encode, Decode, PartialEq)]
