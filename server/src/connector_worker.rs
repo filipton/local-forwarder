@@ -1,8 +1,4 @@
-use crate::{
-    channeled_channel,
-    structs::{ConnectorInfo, MultiStream},
-    tunnel, ConnectorChannel,
-};
+use crate::{channeled_channel, tunnel, ConnectorChannel};
 use color_eyre::Result;
 use std::sync::Arc;
 use tokio::{
@@ -12,6 +8,7 @@ use tokio::{
     task::JoinHandle,
 };
 use udp_stream::UdpListener;
+use utils::{ConnectorInfo, MultiStream};
 
 pub async fn spawn_connector_worker(
     connector_channel: ConnectorChannel,
@@ -77,9 +74,7 @@ async fn connector_worker(
                 let mut info = vec![0; info_len as usize];
                 socket.read_exact(&mut info).await?;
 
-                let info: ConnectorInfo =
-                    bincode::decode_from_slice(&info, bincode::config::standard())?.0;
-
+                let info: ConnectorInfo = ConnectorInfo::decode(&info)?;
                 tunnel::spawn_multiple_tunnels(
                     tunnel_channels.clone(),
                     connector_channel.clone(),

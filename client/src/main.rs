@@ -1,15 +1,13 @@
 use color_eyre::Result;
 use std::time::Duration;
-use structs::{Config, ConvertedConfig, MultiStream, PortType};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
-};
+use structs::{Config, ConvertedConfig};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use udp_stream::UdpStream;
+use utils::{MultiStream, PortType};
 
 mod structs;
 
-const UDP_BUFFER_SIZE: usize = 65536;
+const BUFFER_SIZE: usize = 65536;
 const UDP_TIMEOUT: u64 = 10 * 1000;
 
 #[tokio::main]
@@ -46,8 +44,7 @@ async fn connector_worker(config: &ConvertedConfig) -> Result<()> {
     stream.write_u16(0).await?;
     stream.write_u128(config.code).await?;
 
-    let encoded_data = bincode::encode_to_vec(&config.connector, bincode::config::standard())?;
-
+    let encoded_data = config.connector.encode()?;
     stream.write_u16(encoded_data.len() as u16).await?;
     stream.write_all(&encoded_data).await?;
     stream.flush().await?;
@@ -102,8 +99,8 @@ async fn proxy_tcp(mut tunnel: MultiStream, ip: &str, local_port: u16) -> Result
 async fn proxy_udp(mut tunnel: MultiStream, ip: &str, local_port: u16) -> Result<()> {
     let mut local = UdpStream::connect(format!("{}:{}", ip, local_port).parse()?).await?;
 
-    let mut local_buf = vec![0u8; UDP_BUFFER_SIZE];
-    let mut remote_buf = vec![0u8; UDP_BUFFER_SIZE];
+    let mut local_buf = vec![0u8; BUFFER_SIZE];
+    let mut remote_buf = vec![0u8; BUFFER_SIZE];
 
     let timeout = Duration::from_millis(UDP_TIMEOUT);
     loop {

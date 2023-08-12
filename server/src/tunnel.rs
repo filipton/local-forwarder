@@ -1,8 +1,4 @@
-use crate::{
-    channeled_channel,
-    structs::{ConnectorPort, MultiStream, PortType},
-    ConnectorChannel,
-};
+use crate::{channeled_channel, ConnectorChannel};
 use color_eyre::Result;
 use lazy_static::lazy_static;
 use std::{sync::Arc, time::Duration};
@@ -12,9 +8,10 @@ use tokio::{
     sync::RwLock,
     task::JoinHandle,
 };
-use udp_stream::{UdpListener, UdpStream};
+use udp_stream::UdpListener;
+use utils::{ConnectorPort, MultiStream, PortType};
 
-const UDP_BUFFER_SIZE: usize = 65536;
+const BUFFER_SIZE: usize = 65536;
 const UDP_TIMEOUT: u64 = 10 * 1000;
 
 lazy_static! {
@@ -127,8 +124,8 @@ async fn proxy_tunnel_udp(
         tokio::spawn(async move {
             tokio::select! {
                 Ok(mut tunnel) = channel.recv() => {
-                    let mut local_buf = vec![0u8; UDP_BUFFER_SIZE];
-                    let mut remote_buf = vec![0u8; UDP_BUFFER_SIZE];
+                    let mut local_buf = vec![0u8; BUFFER_SIZE];
+                    let mut remote_buf = vec![0u8; BUFFER_SIZE];
 
                     loop {
                         tokio::select! {
