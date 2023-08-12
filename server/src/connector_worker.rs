@@ -126,8 +126,11 @@ async fn connector_worker_udp(
         let connector_code = connector_code.clone();
 
         tokio::spawn(async move {
-            let port = socket.read_u16().await?;
-            let code = socket.read_u128().await?;
+            let mut buf = [0; 18];
+            socket.read_exact(&mut buf).await?;
+
+            let port = u16::from_be_bytes(buf[0..2].try_into()?);
+            let code = u128::from_be_bytes(buf[2..18].try_into()?);
             if code != connector_code {
                 return Ok(());
             }
