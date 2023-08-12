@@ -1,6 +1,6 @@
 use color_eyre::Result;
 use std::time::Duration;
-use structs::{Config, ConvertedConfig, PortType};
+use structs::{Config, ConvertedConfig, MultiStream, PortType};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -71,14 +71,14 @@ async fn connector_worker(config: &ConvertedConfig) -> Result<()> {
         };
 
         tokio::spawn(async move {
-            let mut tunnel =
-                tokio::net::TcpStream::connect((config.connector_ip, config.connector_port))
-                    .await?;
-
-            tunnel.set_nodelay(true)?;
-            tunnel.write_u16(port).await?;
-            tunnel.write_u128(config.code).await?;
-            tunnel.flush().await?;
+            let tunnel = MultiStream::connect_and_setup(
+                &config.connector_ip,
+                config.connector_port,
+                PortType::Udp,
+                port,
+                config.code,
+            )
+            .await?;
 
             if local_port.port_type == PortType::Tcp {
                 proxy_tcp(tunnel, &local_port.local_ip, local_port.port_local).await?;
@@ -91,14 +91,15 @@ async fn connector_worker(config: &ConvertedConfig) -> Result<()> {
     }
 }
 
-async fn proxy_tcp(mut tunnel: TcpStream, ip: &str, local_port: u16) -> Result<()> {
+async fn proxy_tcp(mut tunnel: MultiStream, ip: &str, local_port: u16) -> Result<()> {
     let mut local = tokio::net::TcpStream::connect((ip, local_port)).await?;
+    local.set_nodelay(true)?;
 
     tokio::io::copy_bidirectional(&mut tunnel, &mut local).await?;
     Ok(())
 }
 
-async fn proxy_udp(mut tunnel: TcpStream, ip: &str, local_port: u16) -> Result<()> {
+async fn proxy_udp(mut tunnel: MultiStream, ip: &str, local_port: u16) -> Result<()> {
     let mut local = UdpStream::connect(format!("{}:{}", ip, local_port).parse()?).await?;
 
     let mut local_buf = vec![0u8; UDP_BUFFER_SIZE];

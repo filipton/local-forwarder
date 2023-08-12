@@ -11,18 +11,31 @@ use tokio::{
     sync::RwLock,
     task::JoinHandle,
 };
+use udp_stream::UdpListener;
 
 pub async fn spawn_connector_worker(
     connector_channel: ConnectorChannel,
     tunnel_channels: channeled_channel::ChanneledChannel<MultiStream>,
     connector_code: u128,
 ) -> Result<()> {
+    let tunnel_channels_cp = tunnel_channels.clone();
+    let connector_code_cp = connector_code.clone();
+
     tokio::spawn(async move {
         loop {
             if let Err(e) =
                 connector_worker(&connector_channel, &tunnel_channels, &connector_code).await
             {
                 eprintln!("Connection worker error: {:?}", e);
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            }
+        }
+    });
+
+    tokio::spawn(async move {
+        loop {
+            if let Err(e) = connector_worker_udp(&tunnel_channels_cp, &connector_code_cp).await {
+                eprintln!("Connection listener error: {:?}", e);
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
         }
@@ -96,6 +109,37 @@ async fn connector_worker(
                     .send(MultiStream::Tcp(socket))
                     .await?;
             }
+
+            Ok::<(), color_eyre::Report>(())
+        });
+    }
+}
+
+async fn connector_worker_udp(
+    tunnel_channels: &channeled_channel::ChanneledChannel<MultiStream>,
+    connector_code: &u128,
+) -> Result<()> {
+    let listener = UdpListener::bind("0.0.0.0:1337".parse()?).await?;
+
+    loop {
+        let (mut socket, _) = listener.accept().await?;
+
+        let tunnel_channels = tunnel_channels.clone();
+        let connector_code = connector_code.clone();
+
+        tokio::spawn(async move {
+            let port = socket.read_u16().await?;
+            let code = socket.read_u128().await?;
+            if code != connector_code {
+                return Ok(());
+            }
+
+            tunnel_channels
+                .get_sender(&port)
+                .await
+                .ok_or_else(|| color_eyre::eyre::eyre!("Could not get sender for port {}", port))?
+                .send(MultiStream::Udp(socket))
+                .await?;
 
             Ok::<(), color_eyre::Report>(())
         });
