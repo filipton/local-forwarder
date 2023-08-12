@@ -50,13 +50,17 @@ impl MultiStream {
         port: u16,
         code: u128,
     ) -> Result<Self> {
+        let mut bytes: Vec<u8> = vec![];
+        bytes.write_u16(port).await?;
+        bytes.write_u128(code).await?;
+
         match port_type {
             PortType::Tcp => {
                 let mut stream =
                     TcpStream::connect(format!("{}:{}", connector_ip, connector_port)).await?;
+
                 stream.set_nodelay(true)?;
-                stream.write_u16(port).await?;
-                stream.write_u128(code).await?;
+                stream.write_all(&bytes).await?;
                 stream.flush().await?;
 
                 Ok(MultiStream::Tcp(stream))
@@ -65,8 +69,8 @@ impl MultiStream {
                 let mut stream =
                     UdpStream::connect(format!("{}:{}", connector_ip, connector_port).parse()?)
                         .await?;
-                stream.write_u16(port).await?;
-                stream.write_u128(code).await?;
+
+                stream.write_all(&bytes).await?;
                 stream.flush().await?;
 
                 Ok(MultiStream::Udp(stream))
