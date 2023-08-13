@@ -94,7 +94,7 @@ async fn proxy_tcp(tunnel: MultiStream, ip: &str, local_port: u16) -> Result<()>
     let local = tokio::net::TcpStream::connect((ip, local_port)).await?;
     local.set_nodelay(true)?;
 
-    tunnel.tunnel_connection(MultiStream::Tcp(local)).await?;
+    tunnel.copy_bidirectional(local).await?;
     Ok(())
 }
 
@@ -102,8 +102,6 @@ async fn proxy_udp(tunnel: MultiStream, ip: &str, local_port: u16) -> Result<()>
     let socket = UdpSocket::bind("0.0.0.0:0").await?;
     let local = UdpStreamRemote::new(socket, format!("{}:{}", ip, local_port).parse()?);
 
-    tunnel
-        .tunnel_connection(MultiStream::UdpRemote(local))
-        .await?;
+    tunnel.copy_bidirectional(local).await?;
     Ok(())
 }

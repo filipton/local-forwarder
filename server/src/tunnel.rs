@@ -91,7 +91,7 @@ async fn proxy_tunnel_tcp(
         tokio::spawn(async move {
             tokio::select! {
                 Ok(tunnel) = channel.recv() => {
-                    tunnel.tunnel_connection(MultiStream::Tcp(remote)).await?;
+                    tunnel.copy_bidirectional(remote).await?;
                 },
                 _ = tokio::time::sleep(tokio::time::Duration::from_secs(1)) => {
                     eprintln!("Tunnel timed out");
@@ -125,7 +125,7 @@ async fn proxy_tunnel_udp(
         tokio::spawn(async move {
             tokio::select! {
                 Ok(tunnel) = channel.recv() => {
-                    tunnel.tunnel_connection(MultiStream::UdpLocal(remote)).await?;
+                    tunnel.copy_bidirectional(remote).await?;
                 },
                 _ = tokio::time::sleep(tokio::time::Duration::from_secs(1)) => {
                     eprintln!("Proxy worker timed out");

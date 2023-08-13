@@ -121,54 +121,61 @@ impl MultiStream {
 
         Ok(())
     }
-}
 
-impl AsyncWrite for MultiStream {
-    fn poll_write(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<std::io::Result<usize>> {
-        match self.get_mut() {
-            MultiStream::Tcp(stream) => std::pin::Pin::new(stream).poll_write(cx, buf),
-            MultiStream::UdpLocal(stream) => std::pin::Pin::new(stream).poll_write(cx, buf),
-            MultiStream::UdpRemote(stream) => std::pin::Pin::new(stream).poll_write(cx, buf),
+    pub async fn copy_bidirectional<T>(self, s2: T) -> Result<()>
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+    {
+        match self {
+            MultiStream::Tcp(s) => Self::inner_copy_bidirectional(s, s2).await?,
+            MultiStream::UdpLocal(s) => Self::inner_copy_bidirectional(s, s2).await?,
+            MultiStream::UdpRemote(s) => Self::inner_copy_bidirectional(s, s2).await?,
         }
+
+        Ok(())
     }
 
-    fn poll_flush(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        match self.get_mut() {
-            MultiStream::Tcp(stream) => std::pin::Pin::new(stream).poll_flush(cx),
-            MultiStream::UdpLocal(stream) => std::pin::Pin::new(stream).poll_flush(cx),
-            MultiStream::UdpRemote(stream) => std::pin::Pin::new(stream).poll_flush(cx),
-        }
-    }
+    async fn inner_copy_bidirectional<T1, T2>(mut stream1: T1, mut stream2: T2) -> Result<()>
+    where
+        T1: AsyncRead + AsyncWrite + Unpin,
+        T2: AsyncRead + AsyncWrite + Unpin,
+    {
+        let local_buf = &mut [0u8; BUFFER_SIZE];
+        let remote_buf = &mut [0u8; BUFFER_SIZE];
 
-    fn poll_shutdown(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        match self.get_mut() {
-            MultiStream::Tcp(stream) => std::pin::Pin::new(stream).poll_shutdown(cx),
-            MultiStream::UdpLocal(stream) => std::pin::Pin::new(stream).poll_shutdown(cx),
-            MultiStream::UdpRemote(stream) => std::pin::Pin::new(stream).poll_shutdown(cx),
-        }
-    }
-}
+        loop {
+            tokio::select! {
+                res = stream1.read(&mut local_buf[..])=> {
+                    if res.is_err() {
+                        stream1.shutdown().await?;
+                        stream2.shutdown().await?;
+                        break;
+                    }
 
-impl AsyncRead for MultiStream {
-    fn poll_read(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        match self.get_mut() {
-            MultiStream::Tcp(stream) => std::pin::Pin::new(stream).poll_read(cx, buf),
-            MultiStream::UdpLocal(stream) => std::pin::Pin::new(stream).poll_read(cx, buf),
-            MultiStream::UdpRemote(stream) => std::pin::Pin::new(stream).poll_read(cx, buf),
+                    let n = res?;
+                    if n == 0 {
+                        break;
+                    }
+
+                    stream2.write_all(&local_buf[..n]).await?;
+                }
+                res = stream2.read(&mut remote_buf[..]) => {
+                    if res.is_err() {
+                        stream1.shutdown().await?;
+                        stream2.shutdown().await?;
+                        break;
+                    }
+
+                    let n = res?;
+                    if n == 0 {
+                        break;
+                    }
+
+                    stream1.write_all(&remote_buf[..n]).await?;
+                }
+            }
         }
+
+        Ok(())
     }
 }
