@@ -82,7 +82,7 @@ async fn proxy_tunnel_tcp(
         .ok_or_else(|| color_eyre::eyre::eyre!("Could not get receiver for port {}", port))?;
 
     loop {
-        let (mut remote, _) = listener.accept().await?;
+        let (remote, _) = listener.accept().await?;
         remote.set_nodelay(true)?;
 
         connector_channel.0.send(*port).await?;
@@ -90,8 +90,8 @@ async fn proxy_tunnel_tcp(
 
         tokio::spawn(async move {
             tokio::select! {
-                Ok(mut tunnel) = channel.recv() => {
-                    tokio::io::copy_bidirectional(&mut remote, &mut tunnel).await?;
+                Ok(tunnel) = channel.recv() => {
+                    tunnel.tunnel_connection(MultiStream::Tcp(remote)).await?;
                 },
                 _ = tokio::time::sleep(tokio::time::Duration::from_secs(1)) => {
                     eprintln!("Tunnel timed out");
@@ -108,7 +108,6 @@ async fn proxy_tunnel_udp(
     connector_channel: &ConnectorChannel,
     port: &u16,
 ) -> Result<()> {
-    let timeout = Duration::from_millis(UDP_TIMEOUT);
     let listener = UdpListener::bind(format!("0.0.0.0:{}", port).parse()?).await?;
 
     let channel = tunnel_channels
@@ -117,40 +116,14 @@ async fn proxy_tunnel_udp(
         .ok_or_else(|| color_eyre::eyre::eyre!("Could not get receiver for port {}", port))?;
 
     loop {
-        let (mut remote, _) = listener.accept().await?;
+        let (remote, _) = listener.accept().await?;
 
         connector_channel.0.send(*port).await?;
         let channel = channel.clone();
         tokio::spawn(async move {
             tokio::select! {
-                Ok(mut tunnel) = channel.recv() => {
-                    let mut local_buf = vec![0u8; BUFFER_SIZE];
-                    let mut remote_buf = vec![0u8; BUFFER_SIZE];
-
-                    loop {
-                        tokio::select! {
-                            res = tokio::time::timeout(timeout, tunnel.read(&mut local_buf)) => {
-                                if res.is_err() {
-                                    remote.shutdown();
-                                    tunnel.shutdown().await?;
-                                    break;
-                                }
-
-                                let n = res??;
-                                remote.write_all(&local_buf[..n]).await?;
-                            }
-                            res = tokio::time::timeout(timeout, remote.read(&mut remote_buf)) => {
-                                if res.is_err() {
-                                    remote.shutdown();
-                                    tunnel.shutdown().await?;
-                                    break;
-                                }
-
-                                let n = res??;
-                                tunnel.write_all(&remote_buf[..n]).await?;
-                            }
-                        }
-                    }
+                Ok(tunnel) = channel.recv() => {
+                    tunnel.tunnel_connection(MultiStream::Udp(remote)).await?;
                 },
                 _ = tokio::time::sleep(tokio::time::Duration::from_secs(1)) => {
                     eprintln!("Proxy worker timed out");

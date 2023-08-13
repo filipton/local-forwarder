@@ -1,14 +1,10 @@
 use color_eyre::Result;
-use std::time::Duration;
 use structs::{Config, ConvertedConfig};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use udp_stream::UdpStream;
 use utils::{MultiStream, PortType};
 
 mod structs;
-
-const BUFFER_SIZE: usize = 65536;
-const UDP_TIMEOUT: u64 = 10 * 1000;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -92,43 +88,16 @@ async fn connector_worker(config: &ConvertedConfig) -> Result<()> {
 }
 
 async fn proxy_tcp(mut tunnel: MultiStream, ip: &str, local_port: u16) -> Result<()> {
-    let mut local = tokio::net::TcpStream::connect((ip, local_port)).await?;
+    let local = tokio::net::TcpStream::connect((ip, local_port)).await?;
     local.set_nodelay(true)?;
 
-    tokio::io::copy_bidirectional(&mut tunnel, &mut local).await?;
+    tunnel.tunnel_connection(MultiStream::Tcp(local)).await?;
     Ok(())
 }
 
 async fn proxy_udp(mut tunnel: MultiStream, ip: &str, local_port: u16) -> Result<()> {
-    let mut local = UdpStream::connect(format!("{}:{}", ip, local_port).parse()?).await?;
+    let local = UdpStream::connect(format!("{}:{}", ip, local_port).parse()?).await?;
+    tunnel.tunnel_connection(MultiStream::Udp(local)).await?;
 
-    let mut local_buf = vec![0u8; BUFFER_SIZE];
-    let mut remote_buf = vec![0u8; BUFFER_SIZE];
-
-    let timeout = Duration::from_millis(UDP_TIMEOUT);
-    loop {
-        tokio::select! {
-            res = tokio::time::timeout(timeout, tunnel.read(&mut local_buf))=> {
-                if res.is_err() {
-                    local.shutdown();
-                    tunnel.shutdown().await?;
-                    break;
-                }
-
-                let n = res??;
-                local.write_all(&local_buf[..n]).await?;
-            }
-            res = tokio::time::timeout(timeout, local.read(&mut remote_buf)) => {
-                if res.is_err() {
-                    local.shutdown();
-                    tunnel.shutdown().await?;
-                    break;
-                }
-
-                let n = res??;
-                tunnel.write_all(&remote_buf[..n]).await?;
-            }
-        }
-    }
     Ok(())
 }
