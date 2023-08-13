@@ -223,7 +223,6 @@ dependencies = [
  "lazy_static",
  "rand",
  "tokio",
- "udp-stream",
  "udpflow",
  "utils",
 ]

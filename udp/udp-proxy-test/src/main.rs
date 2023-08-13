@@ -10,7 +10,7 @@ const UDP_TIMEOUT: u64 = 10 * 1000;
 #[tokio::main]
 async fn main() -> Result<()> {
     let addr = "127.0.0.1:8080";
-    let remote_addr = "127.0.0.1:8888";
+    let remote_addr = "34.118.64.16:1337";
     let timeout = Duration::from_millis(UDP_TIMEOUT);
     //let listener = UdpListener::bind(addr.parse()?).await?;
 
@@ -23,7 +23,7 @@ async fn main() -> Result<()> {
         println!("Accepted connection from: {}", stream.peer_addr());
 
         tokio::spawn(async move {
-            let socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+            let socket = UdpSocket::bind("0.0.0.0:0").await.unwrap();
             let mut stream2 = UdpStreamRemote::new(socket, remote_addr.parse().unwrap());
 
             //tokio::io::copy(&mut stream, &mut stream2).await.unwrap();
@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
                         }
                         let n = res.unwrap().unwrap();
 
-                        stream2.write(&local_buf[..n]).await.unwrap();
+                        stream2.write_all(&local_buf[..n]).await.unwrap();
                     }
                     res = tokio::time::timeout(timeout, stream2.read(&mut remote_buf)) => {
                         if res.is_err() {
@@ -55,7 +55,7 @@ async fn main() -> Result<()> {
                         }
                         let n = res.unwrap().unwrap();
 
-                        stream.write(&remote_buf[..n]).await.unwrap();
+                        stream.write_all(&remote_buf[..n]).await.unwrap();
                     }
                 }
             }

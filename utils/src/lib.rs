@@ -1,17 +1,12 @@
-use std::time::Duration;
-
 use bincode::{Decode, Encode};
 use color_eyre::Result;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::TcpStream,
-    time::Instant,
 };
-use udp_stream::UdpStream;
 use udpflow::{UdpSocket, UdpStreamLocal, UdpStreamRemote};
 
-const BUFFER_SIZE: usize = 65536;
-const TIMEOUT: u64 = 10 * 1000;
+pub const BUFFER_SIZE: usize = 65536;
 
 impl ConnectorInfo {
     pub fn encode(&self) -> Result<Vec<u8>> {
@@ -75,17 +70,56 @@ impl MultiStream {
                 Ok(MultiStream::Tcp(stream))
             }
             PortType::Udp => {
-                let socket = UdpSocket::bind("127.0.0.1:0").await?;
+                let socket = UdpSocket::bind("0.0.0.0:0").await?;
                 let mut stream = UdpStreamRemote::new(
                     socket,
                     format!("{}:{}", connector_ip, connector_port).parse()?,
                 );
                 stream.write_all(&bytes).await?;
-                stream.flush().await?;
 
                 Ok(MultiStream::UdpRemote(stream))
             }
         }
+    }
+
+    pub async fn tunnel_connection(mut self, mut stream: MultiStream) -> Result<()> {
+        let local_buf = &mut [0u8; BUFFER_SIZE];
+        let remote_buf = &mut [0u8; BUFFER_SIZE];
+
+        loop {
+            tokio::select! {
+                res = self.read(&mut local_buf[..])=> {
+                    if res.is_err() {
+                        self.shutdown().await?;
+                        stream.shutdown().await?;
+                        break;
+                    }
+
+                    let n = res?;
+                    if n == 0 {
+                        break;
+                    }
+
+                    stream.write_all(&local_buf[..n]).await?;
+                }
+                res = stream.read(&mut remote_buf[..]) => {
+                    if res.is_err() {
+                        self.shutdown().await?;
+                        stream.shutdown().await?;
+                        break;
+                    }
+
+                    let n = res?;
+                    if n == 0 {
+                        break;
+                    }
+
+                    self.write_all(&remote_buf[..n]).await?;
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
