@@ -82,46 +82,6 @@ impl MultiStream {
         }
     }
 
-    pub async fn tunnel_connection(mut self, mut stream: MultiStream) -> Result<()> {
-        let local_buf = &mut [0u8; BUFFER_SIZE];
-        let remote_buf = &mut [0u8; BUFFER_SIZE];
-
-        loop {
-            tokio::select! {
-                res = self.read(&mut local_buf[..])=> {
-                    if res.is_err() {
-                        self.shutdown().await?;
-                        stream.shutdown().await?;
-                        break;
-                    }
-
-                    let n = res?;
-                    if n == 0 {
-                        break;
-                    }
-
-                    stream.write_all(&local_buf[..n]).await?;
-                }
-                res = stream.read(&mut remote_buf[..]) => {
-                    if res.is_err() {
-                        self.shutdown().await?;
-                        stream.shutdown().await?;
-                        break;
-                    }
-
-                    let n = res?;
-                    if n == 0 {
-                        break;
-                    }
-
-                    self.write_all(&remote_buf[..n]).await?;
-                }
-            }
-        }
-
-        Ok(())
-    }
-
     pub async fn copy_bidirectional<T>(self, s2: T) -> Result<()>
     where
         T: AsyncRead + AsyncWrite + Unpin,
