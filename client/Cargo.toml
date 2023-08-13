@@ -11,4 +11,5 @@ serde = { version = "1.0.183", features = ["derive"] }
 serde_json = "1.0.104"
 tokio = { version = "1.30.0", features = ["full"] }
 udp-stream = "0.0.9"
+udpflow = "0.1.0"
 utils = { path = "../utils" }

@@ -1,4 +1,8 @@
-use crate::{channeled_channel, tunnel, ConnectorChannel};
+use crate::{
+    channeled_channel,
+    tunnel::{self, BUFFER_SIZE},
+    ConnectorChannel,
+};
 use color_eyre::Result;
 use std::sync::Arc;
 use tokio::{
@@ -7,7 +11,7 @@ use tokio::{
     sync::RwLock,
     task::JoinHandle,
 };
-use udp_stream::UdpListener;
+use udpflow::{UdpListener, UdpSocket};
 use utils::{ConnectorInfo, MultiStream};
 
 pub async fn spawn_connector_worker(
@@ -117,10 +121,12 @@ async fn connector_worker_udp(
     tunnel_channels: &channeled_channel::ChanneledChannel<MultiStream>,
     connector_code: &u128,
 ) -> Result<()> {
-    let listener = UdpListener::bind("0.0.0.0:1337".parse()?).await?;
+    let socket = UdpSocket::bind("0.0.0.0:1337").await?;
+    let listener = UdpListener::new(socket);
 
+    let buf = &mut [0; BUFFER_SIZE];
     loop {
-        let (mut socket, _) = listener.accept().await?;
+        let (mut socket, _) = listener.accept(&mut buf[..]).await?;
 
         let tunnel_channels = tunnel_channels.clone();
         let connector_code = connector_code.clone();
@@ -139,7 +145,7 @@ async fn connector_worker_udp(
                 .get_sender(&port)
                 .await
                 .ok_or_else(|| color_eyre::eyre::eyre!("Could not get sender for port {}", port))?
-                .send(MultiStream::Udp(socket))
+                .send(MultiStream::UdpLocal(socket))
                 .await?;
 
             Ok::<(), color_eyre::Report>(())

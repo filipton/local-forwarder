@@ -7,8 +7,8 @@ use tokio::{
 
 mod channeled_channel;
 mod connector_worker;
-mod tunnel;
 mod structs;
+mod tunnel;
 
 pub type ConnectorChannel = (async_channel::Sender<u16>, async_channel::Receiver<u16>);
 
@@ -20,7 +20,8 @@ async fn main() -> Result<()> {
     let connector_code = get_or_generate_code().await?;
 
     println!("Connector code: {}", connector_code);
-    connector_worker::spawn_connector_worker(connector_channel, tunnel_channels, connector_code).await?;
+    connector_worker::spawn_connector_worker(connector_channel, tunnel_channels, connector_code)
+        .await?;
 
     tokio::signal::ctrl_c().await?;
     Ok(())

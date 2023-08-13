@@ -10,3 +10,4 @@ anyhow = "1.0.72"
 tokio = { version = "1.29.1", features = ["full"] }
 tokio-util = { version = "0.7.8", features = ["full"] }
 udp-stream = "0.0.9"
+udpflow = "0.1.0"

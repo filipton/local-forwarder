@@ -4,14 +4,14 @@ use lazy_static::lazy_static;
 use std::{sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpListener,
+    net::{TcpListener, UdpSocket},
     sync::RwLock,
     task::JoinHandle,
 };
-use udp_stream::UdpListener;
+use udpflow::UdpListener;
 use utils::{ConnectorPort, MultiStream, PortType};
 
-const BUFFER_SIZE: usize = 65536;
+pub const BUFFER_SIZE: usize = 65536;
 const UDP_TIMEOUT: u64 = 10 * 1000;
 
 lazy_static! {
@@ -82,7 +82,7 @@ async fn proxy_tunnel_tcp(
         .ok_or_else(|| color_eyre::eyre::eyre!("Could not get receiver for port {}", port))?;
 
     loop {
-        let (remote, _) = listener.accept().await?;
+        let (mut remote, _) = listener.accept().await?;
         remote.set_nodelay(true)?;
 
         connector_channel.0.send(*port).await?;
@@ -90,8 +90,8 @@ async fn proxy_tunnel_tcp(
 
         tokio::spawn(async move {
             tokio::select! {
-                Ok(tunnel) = channel.recv() => {
-                    tunnel.tunnel_connection(MultiStream::Tcp(remote)).await?;
+                Ok(mut tunnel) = channel.recv() => {
+                    tokio::io::copy_bidirectional(&mut remote, &mut tunnel).await?;
                 },
                 _ = tokio::time::sleep(tokio::time::Duration::from_secs(1)) => {
                     eprintln!("Tunnel timed out");
@@ -108,22 +108,24 @@ async fn proxy_tunnel_udp(
     connector_channel: &ConnectorChannel,
     port: &u16,
 ) -> Result<()> {
-    let listener = UdpListener::bind(format!("0.0.0.0:{}", port).parse()?).await?;
+    let socket = UdpSocket::bind(format!("0.0.0.0:{}", port)).await?;
+    let listener = UdpListener::new(socket);
 
     let channel = tunnel_channels
         .get_receiver(&port)
         .await
         .ok_or_else(|| color_eyre::eyre::eyre!("Could not get receiver for port {}", port))?;
 
+    let buffer = &mut [0u8; BUFFER_SIZE];
     loop {
-        let (remote, _) = listener.accept().await?;
+        let (mut remote, _) = listener.accept(&mut buffer[..]).await?;
 
         connector_channel.0.send(*port).await?;
         let channel = channel.clone();
         tokio::spawn(async move {
             tokio::select! {
-                Ok(tunnel) = channel.recv() => {
-                    tunnel.tunnel_connection(MultiStream::Udp(remote)).await?;
+                Ok(mut tunnel) = channel.recv() => {
+                    tokio::io::copy_bidirectional(&mut remote, &mut tunnel).await?;
                 },
                 _ = tokio::time::sleep(tokio::time::Duration::from_secs(1)) => {
                     eprintln!("Proxy worker timed out");

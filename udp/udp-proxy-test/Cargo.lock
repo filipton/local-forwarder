@@ -426,6 +426,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "udp-stream",
+ "udpflow",
 ]
 
 [[package]]
@@ -435,6 +436,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8df3ef1fa3dfd82c5ada9eec0093cfbb1775a063eda2f38443d4fafd3081af19"
 dependencies = [
  "bytes",
+ "tokio",
+]
+
+[[package]]
+name = "udpflow"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fdcd3eb84a09ccdb41034d5d251061c6c906fc466a4589a178eaebe23c2451df"
+dependencies = [
  "tokio",
 ]
 

@@ -224,6 +224,7 @@ dependencies = [
  "rand",
  "tokio",
  "udp-stream",
+ "udpflow",
  "utils",
 ]
 
@@ -556,6 +557,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "udpflow"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fdcd3eb84a09ccdb41034d5d251061c6c906fc466a4589a178eaebe23c2451df"
+dependencies = [
+ "tokio",
+]
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -570,6 +580,7 @@ dependencies = [
  "serde",
  "tokio",
  "udp-stream",
+ "udpflow",
 ]
 
 [[package]]

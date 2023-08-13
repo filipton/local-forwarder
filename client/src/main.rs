@@ -1,7 +1,11 @@
 use color_eyre::Result;
 use structs::{Config, ConvertedConfig};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::UdpSocket,
+};
 use udp_stream::UdpStream;
+use udpflow::UdpStreamRemote;
 use utils::{MultiStream, PortType};
 
 mod structs;
@@ -88,16 +92,17 @@ async fn connector_worker(config: &ConvertedConfig) -> Result<()> {
 }
 
 async fn proxy_tcp(mut tunnel: MultiStream, ip: &str, local_port: u16) -> Result<()> {
-    let local = tokio::net::TcpStream::connect((ip, local_port)).await?;
+    let mut local = tokio::net::TcpStream::connect((ip, local_port)).await?;
     local.set_nodelay(true)?;
 
-    tunnel.tunnel_connection(MultiStream::Tcp(local)).await?;
+    tokio::io::copy_bidirectional(&mut tunnel, &mut local).await?;
     Ok(())
 }
 
 async fn proxy_udp(mut tunnel: MultiStream, ip: &str, local_port: u16) -> Result<()> {
-    let local = UdpStream::connect(format!("{}:{}", ip, local_port).parse()?).await?;
-    tunnel.tunnel_connection(MultiStream::Udp(local)).await?;
+    let socket = UdpSocket::bind("127.0.0.1:0").await?;
+    let mut local = UdpStreamRemote::new(socket, format!("{}:{}", ip, local_port).parse()?);
 
+    tokio::io::copy_bidirectional(&mut tunnel, &mut local).await?;
     Ok(())
 }

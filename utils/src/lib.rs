@@ -5,8 +5,10 @@ use color_eyre::Result;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::TcpStream,
+    time::Instant,
 };
 use udp_stream::UdpStream;
+use udpflow::{UdpSocket, UdpStreamLocal, UdpStreamRemote};
 
 const BUFFER_SIZE: usize = 65536;
 const TIMEOUT: u64 = 10 * 1000;
@@ -45,7 +47,8 @@ pub enum PortType {
 
 pub enum MultiStream {
     Tcp(TcpStream),
-    Udp(UdpStream),
+    UdpLocal(UdpStreamLocal),
+    UdpRemote(UdpStreamRemote),
 }
 
 impl MultiStream {
@@ -72,40 +75,15 @@ impl MultiStream {
                 Ok(MultiStream::Tcp(stream))
             }
             PortType::Udp => {
-                let mut stream =
-                    UdpStream::connect(format!("{}:{}", connector_ip, connector_port).parse()?)
-                        .await?;
-
+                let socket = UdpSocket::bind("127.0.0.1:0").await?;
+                let mut stream = UdpStreamRemote::new(
+                    socket,
+                    format!("{}:{}", connector_ip, connector_port).parse()?,
+                );
                 stream.write_all(&bytes).await?;
                 stream.flush().await?;
 
-                Ok(MultiStream::Udp(stream))
-            }
-        }
-    }
-
-    pub async fn tunnel_connection(mut self, mut stream: MultiStream) -> Result<()> {
-        let local_buf = &mut [0u8; BUFFER_SIZE];
-        let remote_buf = &mut [0u8; BUFFER_SIZE];
-
-        let timeout = Duration::from_millis(TIMEOUT);
-
-        let (mut ra, mut wa) = tokio::io::split(&mut self);
-        let (mut rb, mut wb) = tokio::io::split(&mut stream);
-
-        loop {
-            let forward = tokio::time::timeout(timeout, tokio::io::copy(&mut ra, &mut wb));
-            let backward = tokio::time::timeout(timeout, tokio::io::copy(&mut rb, &mut wa));
-
-            tokio::select! {
-                res = forward => {
-                    let n = res??;
-                    println!("Forwarded {} bytes", n);
-                }
-                res = backward => {
-                    let n = res??;
-                    println!("Backwarded {} bytes", n);
-                }
+                Ok(MultiStream::UdpRemote(stream))
             }
         }
     }
@@ -119,7 +97,8 @@ impl AsyncWrite for MultiStream {
     ) -> std::task::Poll<std::io::Result<usize>> {
         match self.get_mut() {
             MultiStream::Tcp(stream) => std::pin::Pin::new(stream).poll_write(cx, buf),
-            MultiStream::Udp(stream) => std::pin::Pin::new(stream).poll_write(cx, buf),
+            MultiStream::UdpLocal(stream) => std::pin::Pin::new(stream).poll_write(cx, buf),
+            MultiStream::UdpRemote(stream) => std::pin::Pin::new(stream).poll_write(cx, buf),
         }
     }
 
@@ -129,7 +108,8 @@ impl AsyncWrite for MultiStream {
     ) -> std::task::Poll<std::io::Result<()>> {
         match self.get_mut() {
             MultiStream::Tcp(stream) => std::pin::Pin::new(stream).poll_flush(cx),
-            MultiStream::Udp(stream) => std::pin::Pin::new(stream).poll_flush(cx),
+            MultiStream::UdpLocal(stream) => std::pin::Pin::new(stream).poll_flush(cx),
+            MultiStream::UdpRemote(stream) => std::pin::Pin::new(stream).poll_flush(cx),
         }
     }
 
@@ -139,7 +119,8 @@ impl AsyncWrite for MultiStream {
     ) -> std::task::Poll<std::io::Result<()>> {
         match self.get_mut() {
             MultiStream::Tcp(stream) => std::pin::Pin::new(stream).poll_shutdown(cx),
-            MultiStream::Udp(stream) => std::pin::Pin::new(stream).poll_shutdown(cx),
+            MultiStream::UdpLocal(stream) => std::pin::Pin::new(stream).poll_shutdown(cx),
+            MultiStream::UdpRemote(stream) => std::pin::Pin::new(stream).poll_shutdown(cx),
         }
     }
 }
@@ -152,7 +133,8 @@ impl AsyncRead for MultiStream {
     ) -> std::task::Poll<std::io::Result<()>> {
         match self.get_mut() {
             MultiStream::Tcp(stream) => std::pin::Pin::new(stream).poll_read(cx, buf),
-            MultiStream::Udp(stream) => std::pin::Pin::new(stream).poll_read(cx, buf),
+            MultiStream::UdpLocal(stream) => std::pin::Pin::new(stream).poll_read(cx, buf),
+            MultiStream::UdpRemote(stream) => std::pin::Pin::new(stream).poll_read(cx, buf),
         }
     }
 }
