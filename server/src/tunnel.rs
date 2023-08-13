@@ -1,9 +1,8 @@
 use crate::{channeled_channel, ConnectorChannel};
 use color_eyre::Result;
 use lazy_static::lazy_static;
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, UdpSocket},
     sync::RwLock,
     task::JoinHandle,
@@ -12,7 +11,6 @@ use udpflow::UdpListener;
 use utils::{ConnectorPort, MultiStream, PortType};
 
 pub const BUFFER_SIZE: usize = 65536;
-const UDP_TIMEOUT: u64 = 10 * 1000;
 
 lazy_static! {
     pub static ref TUNNEL_TASKS: Arc<RwLock<Vec<JoinHandle<()>>>> =
