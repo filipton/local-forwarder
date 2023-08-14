@@ -2,7 +2,7 @@ use color_eyre::Result;
 use serde::{Deserialize, Serialize};
 use utils::{ConnectorInfo, ConnectorPort, PortType};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
     pub connector: String,
     pub code: u128,
@@ -34,6 +34,10 @@ pub struct ConvertedConfig {
 
 impl Config {
     pub async fn load() -> Result<Self> {
+        if std::env::var("LF_ENV").is_ok() {
+            return Self::load_from_env().await;
+        }
+
         let config_res = tokio::fs::read_to_string("config.json").await;
         match config_res {
             Ok(config) => {
@@ -59,6 +63,49 @@ impl Config {
                 return Ok(config);
             }
         }
+    }
+
+    async fn load_from_env() -> Result<Self> {
+        let mut config = Config::default();
+        config.connector = std::env::var("LF_CONNECTOR").unwrap_or(String::from("server:1337"));
+        config.code = std::env::var("LF_CODE")
+            .unwrap_or(String::from("123213123123123"))
+            .parse::<u128>()?;
+
+        let mut ports: Vec<ConfigPort> = Vec::new();
+        for (key, value) in std::env::vars() {
+            if key.starts_with("LF_PORT") {
+                let splitted_value = value.split(":").collect::<Vec<&str>>();
+
+                let _type = value.split("/").nth(1).unwrap_or("TCP");
+                let tunnel_type = key.split("_").nth(1).unwrap_or("TCP");
+                let mut ip = "127.0.0.1";
+                let remote;
+                let local;
+
+                if splitted_value.len() == 3 {
+                    ip = splitted_value[0];
+                    remote = splitted_value[1].parse::<u16>()?;
+                    local = splitted_value[2].parse::<u16>()?;
+                } else {
+                    remote = splitted_value[0].parse::<u16>()?;
+                    local = splitted_value[1].parse::<u16>()?;
+                }
+
+                let port = ConfigPort {
+                    remote,
+                    local,
+                    ip: Some(ip.to_string()),
+                    _type: Some(_type.to_string()),
+                    tunnel_type: Some(tunnel_type.to_string()),
+                };
+
+                ports.push(port);
+            }
+        }
+
+        config.ports = ports;
+        Ok(config)
     }
 
     pub fn convert(&self) -> Result<ConvertedConfig> {
