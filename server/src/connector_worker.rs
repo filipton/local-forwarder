@@ -1,5 +1,6 @@
 use crate::{
     channeled_channel,
+    structs::Config,
     tunnel::{self, BUFFER_SIZE},
     ConnectorChannel,
 };
@@ -17,16 +18,14 @@ use utils::{ConnectorInfo, MultiStream};
 pub async fn spawn_connector_worker(
     connector_channel: ConnectorChannel,
     tunnel_channels: channeled_channel::ChanneledChannel<MultiStream>,
-    connector_code: u128,
+    config: Config,
 ) -> Result<()> {
     let tunnel_channels_cp = tunnel_channels.clone();
-    let connector_code_cp = connector_code.clone();
+    let config_cp = config.clone();
 
     tokio::spawn(async move {
         loop {
-            if let Err(e) =
-                connector_worker(&connector_channel, &tunnel_channels, &connector_code).await
-            {
+            if let Err(e) = connector_worker(&connector_channel, &tunnel_channels, &config).await {
                 eprintln!("Connection worker error: {:?}", e);
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
@@ -35,7 +34,7 @@ pub async fn spawn_connector_worker(
 
     tokio::spawn(async move {
         loop {
-            if let Err(e) = connector_worker_udp(&tunnel_channels_cp, &connector_code_cp).await {
+            if let Err(e) = connector_worker_udp(&tunnel_channels_cp, &config_cp).await {
                 eprintln!("Connection listener error: {:?}", e);
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
@@ -48,9 +47,9 @@ pub async fn spawn_connector_worker(
 async fn connector_worker(
     connector_channel: &ConnectorChannel,
     tunnel_channels: &channeled_channel::ChanneledChannel<MultiStream>,
-    connector_code: &u128,
+    config: &Config,
 ) -> Result<()> {
-    let listener = TcpListener::bind("0.0.0.0:1337").await?;
+    let listener = TcpListener::bind(format!("0.0.0.0:{}", config.port)).await?;
     let connector_task: Arc<RwLock<Option<JoinHandle<()>>>> = Arc::new(RwLock::new(None));
 
     loop {
@@ -60,7 +59,7 @@ async fn connector_worker(
         let tunnel_channels = tunnel_channels.clone();
         let connector_task = connector_task.clone();
         let connector_channel = connector_channel.clone();
-        let connector_code = connector_code.clone();
+        let config = config.clone();
 
         tokio::spawn(async move {
             let mut buf = [0; 18];
@@ -68,7 +67,7 @@ async fn connector_worker(
 
             let port = u16::from_be_bytes(buf[0..2].try_into()?);
             let code = u128::from_be_bytes(buf[2..18].try_into()?);
-            if code != connector_code {
+            if code != config.code {
                 return Ok(());
             }
 
@@ -119,9 +118,9 @@ async fn connector_worker(
 
 async fn connector_worker_udp(
     tunnel_channels: &channeled_channel::ChanneledChannel<MultiStream>,
-    connector_code: &u128,
+    config: &Config,
 ) -> Result<()> {
-    let socket = UdpSocket::bind("0.0.0.0:1337").await?;
+    let socket = UdpSocket::bind(format!("0.0.0.0:{}", config.port)).await?;
     let listener = UdpListener::new(socket);
 
     let buf = &mut [0; BUFFER_SIZE];
@@ -129,7 +128,7 @@ async fn connector_worker_udp(
         let (mut socket, _) = listener.accept(&mut buf[..]).await?;
 
         let tunnel_channels = tunnel_channels.clone();
-        let connector_code = connector_code.clone();
+        let config = config.clone();
 
         tokio::spawn(async move {
             let mut buf = [0; 18];
@@ -137,7 +136,7 @@ async fn connector_worker_udp(
 
             let port = u16::from_be_bytes(buf[0..2].try_into()?);
             let code = u128::from_be_bytes(buf[2..18].try_into()?);
-            if code != connector_code {
+            if code != config.code {
                 return Ok(());
             }
 
