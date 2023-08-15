@@ -62,11 +62,11 @@ async fn connector_worker(
         let config = config.clone();
 
         tokio::spawn(async move {
-            let mut buf = [0; 18];
+            let mut buf = [0; 10];
             socket.read_exact(&mut buf).await?;
 
             let port = u16::from_be_bytes(buf[0..2].try_into()?);
-            let code = u128::from_be_bytes(buf[2..18].try_into()?);
+            let code = u64::from_be_bytes(buf[2..10].try_into()?);
             if code != config.code {
                 return Ok(());
             }
@@ -135,7 +135,7 @@ async fn connector_worker_udp(
             socket.read_exact(&mut buf).await?;
 
             let port = u16::from_be_bytes(buf[0..2].try_into()?);
-            let code = u128::from_be_bytes(buf[2..18].try_into()?);
+            let code = u64::from_be_bytes(buf[2..10].try_into()?);
             if code != config.code {
                 return Ok(());
             }

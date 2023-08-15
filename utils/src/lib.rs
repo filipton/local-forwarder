@@ -10,6 +10,9 @@ pub const BUFFER_SIZE: usize = 65536;
 
 impl ConnectorInfo {
     pub fn encode(&self) -> Result<Vec<u8>> {
+        println!("ConnectorInfo: {:?}", self);
+        println!("ConnectorInfo: {:?}", serde_json::to_vec(self)?);
+        println!("ConnectorInfo: {:?}", serde_json::to_string(self)?);
         Ok(serde_json::to_vec(self)?)
     }
 
@@ -52,11 +55,11 @@ impl MultiStream {
         connector_port: u16,
         port_type: PortType,
         port: u16,
-        code: u128,
+        code: u64,
     ) -> Result<Self> {
         let mut bytes: Vec<u8> = vec![];
         bytes.write_u16(port).await?;
-        bytes.write_u128(code).await?;
+        bytes.write_u64(code).await?;
 
         match port_type {
             PortType::Tcp => {

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    pub code: u128,
+    pub code: u64,
     pub port: u16,
 }
 
@@ -28,7 +28,7 @@ impl Config {
             Ok(config)
         } else {
             let config = Config {
-                code: rand::random::<u128>(),
+                code: rand::random::<u64>(),
                 port: 1337,
             };
 

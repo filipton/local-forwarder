@@ -43,7 +43,7 @@ async fn connector_worker(config: &ConvertedConfig) -> Result<()> {
 
     let mut bytes = vec![];
     bytes.write_u16(0).await?;
-    bytes.write_u128(config.code).await?;
+    bytes.write_u64(config.code).await?;
     stream.write_all(&bytes).await?;
 
     let encoded_data = config.connector.encode()?;

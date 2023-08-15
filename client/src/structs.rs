@@ -5,7 +5,7 @@ use utils::{ConnectorInfo, ConnectorPort, PortType};
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
     pub connector: String,
-    pub code: u128,
+    pub code: u64,
 
     pub ports: Vec<ConfigPort>,
 }
@@ -27,7 +27,7 @@ pub struct ConfigPort {
 pub struct ConvertedConfig {
     pub connector: ConnectorInfo,
 
-    pub code: u128,
+    pub code: u64,
     pub connector_ip: String,
     pub connector_port: u16,
 }
@@ -74,7 +74,7 @@ impl Config {
         config.connector = std::env::var("LF_CONNECTOR").unwrap_or(String::from("server:1337"));
         config.code = std::env::var("LF_CODE")
             .unwrap_or(String::from("123213123123123"))
-            .parse::<u128>()?;
+            .parse::<u64>()?;
 
         let mut ports: Vec<ConfigPort> = Vec::new();
         for (key, value) in std::env::vars() {

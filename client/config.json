@@ -1,13 +1,13 @@
 {
   "connector": "34.118.64.16:1337",
-  "code": 293723451390569281694475056068681761875,
+  "code": 750844415420433221,
   "ports": [
     {
       "remote": 80,
       "local": 80,
       "ip": "127.0.0.1",
-      "type": "TCP",
-      "tunnelType": "UDP"
+      "type": "tcp",
+      "tunnelType": "tcp"
     }
   ]
 }
