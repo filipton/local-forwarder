@@ -1,5 +1,5 @@
-use bincode::{Decode, Encode};
 use color_eyre::Result;
+use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::TcpStream,
@@ -10,20 +10,20 @@ pub const BUFFER_SIZE: usize = 65536;
 
 impl ConnectorInfo {
     pub fn encode(&self) -> Result<Vec<u8>> {
-        Ok(bincode::encode_to_vec(self, bincode::config::standard())?)
+        Ok(serde_json::to_vec(self)?)
     }
 
     pub fn decode(data: &[u8]) -> Result<Self> {
-        Ok(bincode::decode_from_slice(data, bincode::config::standard())?.0)
+        Ok(serde_json::from_slice(data)?)
     }
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectorInfo {
     pub ports: Vec<ConnectorPort>,
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectorPort {
     pub port_remote: u16,
     pub port_local: u16,
@@ -33,7 +33,7 @@ pub struct ConnectorPort {
     pub tunnel_type: PortType,
 }
 
-#[derive(Debug, Clone, Encode, Decode, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[allow(dead_code)]
 pub enum PortType {
     Tcp,

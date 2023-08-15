@@ -38,7 +38,11 @@ impl Config {
             return Self::load_from_env().await;
         }
 
-        let config_res = tokio::fs::read_to_string("config.json").await;
+        let config_path = std::env::args()
+            .nth(1)
+            .unwrap_or(String::from("config.json"));
+        let config_res = tokio::fs::read_to_string(config_path).await;
+
         match config_res {
             Ok(config) => {
                 let config: Config = serde_json::from_str(&config)?;
@@ -78,7 +82,7 @@ impl Config {
                 let splitted_value = value.split(":").collect::<Vec<&str>>();
 
                 let _type = value.split("/").nth(1).unwrap_or("TCP");
-                let tunnel_type = key.split("_").nth(1).unwrap_or("TCP");
+                let tunnel_type = key.split("_").nth(2).unwrap_or("TCP");
                 let mut ip = "127.0.0.1";
                 let remote;
                 let local;
