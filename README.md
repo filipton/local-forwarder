@@ -18,7 +18,6 @@ doesn't allow that you can use this to forward local port to remote server.
   "port": 1337
 }
 ```
-
 |          | Explanation                                            |
 |----------|--------------------------------------------------------|
 | **code** | connector code (must be the same in client to connect) |
@@ -40,7 +39,6 @@ doesn't allow that you can use this to forward local port to remote server.
   ]
 }
 ```
-
 |               | Explanation                           |
 |---------------|---------------------------------------|
 | **connector** | address ip with port to the connector |
@@ -57,18 +55,16 @@ doesn't allow that you can use this to forward local port to remote server.
 | **tunnelType** | tunnel port type (TCP \| UDP) |
 
 > **Warning**
-> Tunnel type almost always should be TCP, because UDP is highly unstable and slow.
+> Tunnel type almost always should be TCP, because UDP is highly unstable and slow.<br />
 > Another flow of UDP tunnel type is that golang client doesn't support it yet.
 
 ## Docker Setup
-You can also use docker images to easily create tunnels.
-
+You can also use docker images to easily create tunnels. <br />
 Simple docker-compose file can be found [here](./docker/docker-compose.yml)
 
 ### Env config
-As you can see for easier configuration in docker you can use environment variables
-
-Client "ports notation" is similar to docker's "ports notation".
+As you can see for easier configuration in docker you can use environment variables. <br />
+Client ports format is similar to docker's ports format.
 
 Example: 192.168.1.38:8080:80/tcp
 
@@ -98,3 +94,4 @@ Example: 192.168.1.38:8080:80/tcp
 
 ### Thoughts
 - Maybe there is a way to simplify connection process
+
