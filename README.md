@@ -66,7 +66,9 @@ Simple docker-compose file can be found [here](./docker/docker-compose.yml)
 ### Env config
 As you can see for easier configuration in docker you can use environment variables
 
-Client "ports notation": LF_PORTwhatever=**192.168.1.38**:**8080**:**80**/**tcp**
+Client "ports notation" is similar to docker's "ports notation".
+
+Example: 192.168.1.38:8080:80/tcp
 
 |                  | Explanation                                    |
 |------------------|------------------------------------------------|
