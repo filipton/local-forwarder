@@ -1,8 +1,8 @@
 # Local Forwarder
-Simple and easy to use port forwarder.
+Simple and easy to use selfhosted port forwarder.
 
 ## Use case
-If you want to forward and port but your home router (or your ISP) 
+If you want to forward and port but your router (or your ISP) 
 doesn't allow that you can use this to forward local port to remote server.
 
 ## Manual Setup
@@ -81,3 +81,20 @@ Example: 192.168.1.38:8080:80/tcp
 
 > **Warning**
 > Each of your ports specified in env **must have different key** (e.g. LF_PORT1, LF_PORT2...)
+
+## How does it work
+![ksnip_20230816-231203](https://github.com/filipton/local-forwarder/assets/37213766/06d694c5-8015-4d3d-ae48-8ba2d7f16a2e)
+
+### Client startup
+- Client sends to server on start his config (by default: port 1337)
+- Server recieves this config, clears old connection tasks and spawns new
+
+### New remote connection
+- After request server sends information to client about which port is accessed
+- Client recieves this port and spawns required local connection
+- Client spawns new connection (called tunnel) (by default: port 1337) and sends it which port is forwarded there
+- Client is forwarding packets from his local connection to tunnel (and vice versa)
+- Server is forwarding packets from tunnel to his remote connection (and vice versa)
+
+### Thoughts
+- Maybe there is a way to simplify connection process
