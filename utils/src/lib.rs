@@ -10,9 +10,6 @@ pub const BUFFER_SIZE: usize = 65536;
 
 impl ConnectorInfo {
     pub fn encode(&self) -> Result<Vec<u8>> {
-        println!("ConnectorInfo: {:?}", self);
-        println!("ConnectorInfo: {:?}", serde_json::to_vec(self)?);
-        println!("ConnectorInfo: {:?}", serde_json::to_string(self)?);
         Ok(serde_json::to_vec(self)?)
     }
 
