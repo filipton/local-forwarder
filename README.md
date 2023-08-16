@@ -19,10 +19,10 @@ doesn't allow that you can use this to forward local port to remote server.
 }
 ```
 
-`code` - connector code, you must have the same code in client and server
-
-`port` - connector port
-
+|          | Explanation                                            |
+|----------|--------------------------------------------------------|
+| **code** | connector code (must be the same in client to connect) |
+| **port** | connector port                                         |
 
 ### Client Configuration
 ```json
@@ -41,22 +41,24 @@ doesn't allow that you can use this to forward local port to remote server.
 }
 ```
 
-`connector` - address ip with port to the connector on remote server
-
-`code` - connector code
-
-`ports` - list of forwarded ports
+|               | Explanation                           |
+|---------------|---------------------------------------|
+| **connector** | address ip with port to the connector |
+| **code**      | connector code                        |
+| **ports**     | list of forwarded ports               |
 
 #### Port entry
-`remote` - port on remote server
+|                | Explanation                   |
+|----------------|-------------------------------|
+| **remote**     | port on remote server         |
+| **local**      | port on "local" machine       |
+| **ip**         | ip to "local" machine         |
+| **type**       | port type (TCP \| UDP)        |
+| **tunnelType** | tunnel port type (TCP \| UDP) |
 
-`local` - port on local machine
-
-`ip` - ip to the local machine
-
-`type` - port type (TCP | UDP)
-
-`tunnelType` - tunnel port type (TCP | UDP) **Note that UDP implementation of tunnel is experimental and can cause errors (UDP AS TUNNEL IS ALSO SLOW AF)**
+> **Warning**
+> Tunnel type almost always should be TCP, because UDP is highly unstable and slow.
+> Another flow of UDP tunnel type is that golang client doesn't support it yet.
 
 ## Docker Setup
 You can also use docker images to easily create tunnels.
