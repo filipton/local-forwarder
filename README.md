@@ -5,7 +5,7 @@ Simple and easy to use port forwarder.
 If you want to forward and port but your home router (or your ISP) 
 doesn't allow that you can use this to forward local port to remote server.
 
-## Setup
+## Manual Setup
 1. Download server binary on your remote machine that allows port forwarding
 2. Run it and copy generated code (if you want to change the code edit /etc/local-forwarder/config.json file)
 3. Download client binary on your local machine
@@ -57,3 +57,22 @@ doesn't allow that you can use this to forward local port to remote server.
 `type` - port type (TCP | UDP)
 
 `tunnelType` - tunnel port type (TCP | UDP) **Note that UDP implementation of tunnel is experimental and can cause errors (UDP AS TUNNEL IS ALSO SLOW AF)**
+
+## Docker Setup
+You can also use docker images to easily create tunnels.
+
+Simple docker-compose file can be found [here](./docker/docker-compose.yml)
+
+### Env config
+As you can see for easier configuration in docker you can use environment variables
+
+Client "ports notation": LF_PORTwhatever=**192.168.1.38**:**8080**:**80**/**tcp**
+
+|                  | Explanation                                    |
+|------------------|------------------------------------------------|
+| **192.168.1.38** | ip to your service (even not in local network) |
+| **8080**         | port on remote machine (lf-server)             |
+| **80**           | port on local machine (lf-client)              |
+| **tcp**          | port type                                      |
+
+> :warning: Each of your ports specified in env **must have different key** (e.g. LF_PORT1, LF_PORT2...)
