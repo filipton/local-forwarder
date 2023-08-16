@@ -1,0 +1,14 @@
+version: '3.8'
+services:
+  client:
+    image: filipton/lf-client:latest
+    restart: always
+    environment:
+      - LF_ENV=true
+      - LF_CONNECTOR=34.118.64.16:1337
+      - LF_CODE=750844415420433221
+      - LF_PORT1=80:80/tcp
+      - LF_PORT2=1234:80/tcp
+    # You can also just mount the config file
+    # volumes:
+    #   - ./config.json:/app/config.json:ro

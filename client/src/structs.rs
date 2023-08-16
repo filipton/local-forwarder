@@ -79,7 +79,12 @@ impl Config {
         let mut ports: Vec<ConfigPort> = Vec::new();
         for (key, value) in std::env::vars() {
             if key.starts_with("LF_PORT") {
-                let splitted_value = value.split(":").collect::<Vec<&str>>();
+                let splitted_value = value
+                    .split("/")
+                    .nth(0)
+                    .expect("SHOULDNT ERROR")
+                    .split(":")
+                    .collect::<Vec<&str>>();
 
                 let _type = value.split("/").nth(1).unwrap_or("TCP");
                 let tunnel_type = key.split("_").nth(2).unwrap_or("TCP");

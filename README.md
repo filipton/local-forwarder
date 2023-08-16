@@ -56,4 +56,4 @@ doesn't allow that you can use this to forward local port to remote server.
 
 `type` - port type (TCP | UDP)
 
-`tunnelType` - tunnel port type (TCP | UDP) **Note that UDP implementation of tunnel is experimental and can cause errors**
+`tunnelType` - tunnel port type (TCP | UDP) **Note that UDP implementation of tunnel is experimental and can cause errors (UDP AS TUNNEL IS ALSO SLOW AF)**
