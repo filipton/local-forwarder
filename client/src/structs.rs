@@ -96,9 +96,14 @@ impl Config {
                     ip = splitted_value[0];
                     remote = splitted_value[1].parse::<u16>()?;
                     local = splitted_value[2].parse::<u16>()?;
-                } else {
+                } else if splitted_value.len() == 2 {
                     remote = splitted_value[0].parse::<u16>()?;
                     local = splitted_value[1].parse::<u16>()?;
+                } else if splitted_value.len() == 1 {
+                    local = splitted_value[0].parse::<u16>()?;
+                    remote = local;
+                } else {
+                    color_eyre::eyre::bail!("Invalid port format: {}", value);
                 }
 
                 let port = ConfigPort {
