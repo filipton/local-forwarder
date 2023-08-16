@@ -75,4 +75,5 @@ Client "ports notation": LF_PORTwhatever=**192.168.1.38**:**8080**:**80**/**tcp*
 | **80**           | port on local machine (lf-client)              |
 | **tcp**          | port type                                      |
 
-> :warning: Each of your ports specified in env **must have different key** (e.g. LF_PORT1, LF_PORT2...)
+> **Warning**
+> Each of your ports specified in env **must have different key** (e.g. LF_PORT1, LF_PORT2...)
