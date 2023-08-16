@@ -5,10 +5,26 @@ services:
     restart: always
     environment:
       - LF_ENV=true
-      - LF_CONNECTOR=34.118.64.16:1337
-      - LF_CODE=750844415420433221
-      - LF_PORT1=80:80/tcp
-      - LF_PORT2=1234:80/tcp
+      - LF_CONNECTOR=192.168.1.38:1337
+      - LF_CODE=694201337
+      - LF_PORT1=192.168.1.38:8080:80/tcp
+      - LF_PORT2=192.168.1.38:1234:80/tcp
     # You can also just mount the config file
     # volumes:
-    #   - ./config.json:/app/config.json:ro
+    #   - ./config.json:/app/config.json
+
+    # Obviously server would be on another machine, but for simplicity its in the same file
+  server:
+    image: filipton/lf-server:latest
+    restart: always
+    network_mode: host
+    environment:
+      - LF_ENV=true
+      - LF_PORT=1337
+      - LF_CODE=694201337
+    # You can also just mount the config file
+    # volumes:
+    #   - ./config.json:/etc/local-forwarder/config.json
+    #
+    #   Or you can mount whole /etc/local-forwarder dir
+    #   - ./config:/etc/local-forwarder
