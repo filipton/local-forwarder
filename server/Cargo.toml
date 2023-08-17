@@ -16,3 +16,9 @@ serde_json = "1.0.104"
 tokio = { version = "1.30.0", features = ["full"] }
 udpflow = "0.1.0"
 utils = { path = "../utils" }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

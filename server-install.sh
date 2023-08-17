@@ -13,6 +13,7 @@ fi
 
 SYSTEMD_URL="https://raw.githubusercontent.com/filipton/local-forwarder/master/systemd/lf-server.service"
 SYSTEMD_PATH="/etc/systemd/system/lf-server.service"
+wget https://github.com/filipton/local-forwarder/releases/latest/download/lf-server -O /usr/local/bin/lf-server
 
 if [ -f "$SYSTEMD_PATH" ]; then
     echo "'lf-server' service already exists. Please remove it first."
