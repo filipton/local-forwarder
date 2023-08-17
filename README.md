@@ -95,3 +95,13 @@ Example: 192.168.1.38:8080:80/tcp
 ### Thoughts
 - Maybe there is a way to simplify connection process
 
+## Installation (Systemd)
+### Client
+```bash
+sudo bash -c "$(curl -sL https://github.com/filipton/local-forwarder/raw/master/client-install.sh)"
+```
+
+### Server
+```bash
+sudo bash -c "$(curl -sL https://github.com/filipton/local-forwarder/raw/master/server-install.sh)"
+```
